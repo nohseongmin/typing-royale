@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>타자 배틀로얄</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<style>
+:root{
+  --bg:#fff; --soft:#f6f7f9; --soft2:#eef0f4; --line:#e8eaee;
+  --ink:#191b1e; --mute:#8b93a1; --dim:#c9ced7;
+  --acc:#10b981; --acc-soft:#e7f8f1;
+  --pink:#ec4899; --pink-soft:#fdeaf4;
+  --red:#ef4444;
+  --row:96px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Pretendard Variable",Pretendard,system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-size:14.5px; display:flex; align-items:center; justify-content:center; padding:24px;
+  -webkit-font-smoothing:antialiased;
+}
+#app{width:100%;max-width:1080px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ================= menu ================= */
+.menu{text-align:center;padding:24px 8px}
+.kicker{font-size:11px;letter-spacing:3px;color:var(--mute);font-weight:700}
+.logo{font-size:46px;font-weight:800;letter-spacing:-1.5px;margin-top:10px}
+.logo em{font-style:normal;color:var(--acc)}
+.sub{color:var(--mute);margin-top:12px;font-size:14px}
+.opts{display:flex;gap:32px;justify-content:center;flex-wrap:wrap;margin:34px 0 26px}
+.opt h4{font-size:11px;color:var(--mute);letter-spacing:2px;margin-bottom:9px;font-weight:700;text-align:left}
+.seg{display:flex;gap:6px}
+.seg button{
+  background:var(--soft);color:var(--mute);border:1px solid transparent;border-radius:999px;
+  padding:9px 18px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s
+}
+.seg button.on{background:var(--acc);color:#fff}
+.seg button:hover:not(.on){background:var(--soft2);color:var(--ink)}
+.btn{
+  background:var(--acc);color:#fff;border:0;border-radius:999px;padding:15px 46px;
+  font:inherit;font-size:16px;font-weight:700;cursor:pointer;transition:.15s;
+  box-shadow:0 6px 18px rgba(16,185,129,.28)
+}
+.btn:hover{transform:translateY(-1px)}
+.btn.ghost{background:var(--soft);color:var(--mute);box-shadow:none;font-size:15px;padding:14px 30px}
+.btn.ghost[disabled]{opacity:.6;cursor:not-allowed;transform:none}
+.cards{
+  margin-top:36px;display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;text-align:left
+}
+.card{background:var(--soft);border-radius:14px;padding:16px 18px}
+.card b{display:block;font-size:13px;margin-bottom:6px}
+.card p{font-size:12.5px;color:var(--mute);line-height:1.65}
+.card .ex{margin-top:8px;font-size:12.5px;color:var(--pink);font-weight:600}
+
+/* ================= hud ================= */
+.hud{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.hud .tick{flex:1;height:4px;background:var(--soft2);border-radius:999px;overflow:hidden}
+.hud .tick i{display:block;height:100%;background:var(--acc);transition:width .1s linear}
+.hud.danger .tick i{background:var(--red)}
+.stat{display:flex;align-items:baseline;gap:4px}
+.stat b{font-size:19px;font-weight:800}
+.stat u{font-size:11px;color:var(--mute);text-decoration:none}
+.stat+.stat{margin-left:14px}
+.hud .tleft{font-size:12px;color:var(--mute);white-space:nowrap}
+.hud.danger .tleft{color:var(--red);font-weight:700}
+
+/* ================= stage ================= */
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 236px;gap:16px;align-items:start}
+.board{
+  background:var(--bg);border:1px solid var(--line);border-radius:20px;
+  padding:8px 22px 18px;position:relative;overflow:hidden
+}
+.board::before{
+  content:"";position:absolute;left:10px;right:10px;top:calc(8px + var(--row));height:var(--row);
+  background:var(--soft);border-radius:14px;z-index:0
+}
+.rail{position:relative;height:calc(var(--row)*3);overflow:hidden;z-index:1}
+.track{transform:translateY(calc(var(--row) * -1))}
+.track.go{transition:transform .42s cubic-bezier(.22,1,.36,1)}
+.row{height:var(--row);display:flex;align-items:center;justify-content:center;padding:0 6px}
+.fit{display:inline-block;white-space:nowrap;transform-origin:center center;font-size:31px;font-weight:600;letter-spacing:.4px}
+.row.past{opacity:0}
+.row.next{opacity:.45}
+.row.shake{animation:sk .22s}
+@keyframes sk{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+.ch{color:var(--dim);transition:color .08s;position:relative;padding-bottom:7px;white-space:pre}
+.ch.tail:empty{display:none}
+.ch.dt{color:var(--pink);opacity:.6}
+.ch.ok{color:var(--ink);opacity:1}
+.ch.comp{color:var(--acc);opacity:1}
+.ch.no{color:var(--red);opacity:1;background:#fee2e2;border-radius:3px}
+.ch.cur::after{
+  content:"";position:absolute;left:6%;right:6%;bottom:0;height:3px;
+  background:var(--acc);border-radius:2px;animation:cb 1s steps(2) infinite
+}
+@keyframes cb{50%{opacity:0}}
+.row.next .ch.dt{opacity:1;font-weight:800}
+
+#type{position:absolute;opacity:0;left:-9999px}
+.hint{text-align:center;font-size:12px;color:var(--mute);height:18px;margin-top:2px}
+.hint b{color:var(--pink)}
+.blur{
+  position:absolute;inset:0;background:rgba(255,255,255,.88);z-index:5;
+  display:none;align-items:center;justify-content:center;font-size:14px;color:var(--mute);cursor:pointer
+}
+.blur.on{display:flex}
+
+/* ================= foes ================= */
+.foes{display:flex;flex-direction:column;gap:8px}
+.foe{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px 13px;cursor:pointer;transition:.15s}
+.foe:hover{background:var(--soft)}
+.foe.target{border-color:var(--pink);background:var(--pink-soft)}
+.foe.dead{opacity:.4}
+.foe.hit{animation:fl .5s}
+@keyframes fl{0%,100%{background:transparent}30%{background:var(--pink-soft)}}
+.foe .top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.foe .rk{font-size:10px;font-weight:800;color:var(--mute);background:var(--soft2);padding:2px 6px;border-radius:999px}
+.foe .nm{font-size:13px;font-weight:700;flex:1}
+.foe .dn{font-size:11.5px;color:var(--mute)}
+.pbar{height:4px;background:var(--soft2);border-radius:999px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--acc);transition:width .12s linear}
+.foe .meta{display:flex;justify-content:space-between;margin-top:7px;font-size:11px;color:var(--mute)}
+.foe .load{color:var(--pink);font-weight:800}
+.aim{font-size:11px;color:var(--mute);text-align:center;padding:6px}
+
+.feed{margin-top:10px;display:flex;flex-direction:column-reverse;gap:4px;height:120px;overflow:hidden}
+.ev{font-size:11.5px;color:var(--mute);padding:5px 10px;background:var(--soft);border-radius:8px;animation:sl .2s}
+.ev.me{background:var(--acc-soft);color:#0b7a5c}
+.ev.dmg{background:var(--pink-soft);color:#a51f68;font-weight:600}
+.ev.out{background:#fff0f0;color:#b91c1c;font-weight:700}
+@keyframes sl{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+
+#toast{position:fixed;top:22px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:7px;align-items:center;pointer-events:none;z-index:60}
+.tst{background:var(--ink);color:#fff;padding:9px 20px;border-radius:999px;font-size:13px;font-weight:700;animation:pp .25s;box-shadow:0 8px 20px rgba(0,0,0,.16)}
+.tst.atk{background:var(--pink)}
+.tst.good{background:var(--acc)}
+@keyframes pp{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+
+/* ================= over ================= */
+.over{text-align:center;padding:50px 20px}
+.over .big{font-size:52px;font-weight:800;letter-spacing:-2px}
+.over .big.win{color:var(--acc)}
+.over p{color:var(--mute);margin-top:10px}
+.final{display:flex;gap:14px;justify-content:center;margin:32px 0}
+.final .card{background:var(--soft);border-radius:14px;padding:16px 26px;text-align:center}
+.final .card b{font-size:26px;font-weight:800;display:block}
+.final .card u{font-size:11px;color:var(--mute);text-decoration:none}
+@media(max-width:820px){.stage{grid-template-columns:1fr}:root{--row:76px}.fit{font-size:23px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* ===================== 문장 풀 ===================== */
+const SENTENCES = [
+  "떠나갈 때가 언제인가를 분명히 알고 가는 이의 뒷모습은 아름답다",
+  "바람이 부는 날에는 창문을 열고 하늘을 오래 바라보았다",
+  "작은 일에도 최선을 다하는 사람이 결국 큰 일을 해낸다",
+  "오늘 걷지 않으면 내일은 뛰어야 한다는 말을 기억하자",
+  "책을 읽는 시간은 세상에서 가장 조용한 여행이 된다",
+  "한 걸음씩 나아가다 보면 어느새 정상에 닿아 있다",
+  "밤하늘의 별은 언제나 그 자리에서 우리를 기다린다",
+  "실패는 성공으로 가는 길에 놓인 작은 돌다리일 뿐이다",
+  "가장 어두운 밤이 지나야 가장 밝은 아침이 찾아온다",
+  "노력은 배신하지 않는다는 말을 나는 아직도 믿는다",
+  "커피 한 잔의 여유가 하루의 피로를 씻어 주기도 한다",
+  "봄이 오면 얼었던 강물도 소리를 내며 흐르기 시작한다",
+  "사람의 마음을 얻는 일이 세상에서 가장 어려운 일이다",
+  "좋은 습관 하나가 인생의 방향을 완전히 바꾸어 놓는다",
+  "여름 소나기가 지나간 자리에 무지개가 걸리기도 한다",
+  "손끝에서 만들어진 문장이 생각보다 멀리 퍼져 나간다",
+  "천천히 가더라도 멈추지 않으면 결국 도착하게 된다",
+  "낡은 골목길에도 저마다의 이야기가 조용히 쌓여 있다",
+  "겨울이 길수록 봄을 기다리는 마음은 더욱 간절해진다",
+  "누구에게나 처음은 서툴고 그래서 더 아름다운 법이다",
+  "새벽에 일어나 마시는 물 한 잔이 하루를 깨워 준다",
+  "기록하지 않은 기억은 시간이 지나면 흐려지기 마련이다",
+  "산은 언제나 그 자리에 있지만 오르는 길은 매번 다르다",
+  "친구의 말 한마디가 무너진 하루를 다시 세워 주었다",
+  "빠른 손보다 정확한 손이 결국 더 멀리 나아가게 된다",
+  "계절이 바뀌는 것을 느끼는 순간 나도 조금 자라 있었다",
+  "어제의 나보다 조금 더 나은 오늘을 살아가면 충분하다",
+  "생각을 글로 옮기는 순간 흐릿하던 것들이 또렷해진다",
+  "길을 잃어 본 사람만이 새로운 길을 찾아낼 수 있다",
+  "지금 이 순간에 집중하는 것이 가장 확실한 방법이다"
+];
+
+/* 끼워넣기 단어는 신조어만. 품사에 맞는 자리에만 들어간다.
+   adn = 관형어(체언 앞)  /  adv = 부사(용언·부사 앞) */
+const SLANG = {
+  adn: ["미친","도른","야르한","찐","킹받는","개쩌는","샤갈"],
+  adv: ["준내","개","핵","겁나","오지게","킹받게","레알"]
+};
+
+/* 삽입 자리 판정. 확실할 때만 자리로 인정하고 애매하면 버린다(자리 수보다 문법이 우선).
+   adn = 뒤가 확실한 체언 -> 관형어를 넣는다
+   adv = 뒤가 확실한 용언·부사 -> 부사를 넣는다
+   은/는/이/가/도/만/로 는 용언 어미와 겹쳐서(않는다는·아직도·있지만) 체언 판정에서 뺐다. */
+const NOUN_TAIL = /(을|를|의|에|에서|에게|께|보다|처럼|마다|까지|부터)$/;
+const VERB_TAIL = /(다|고|며|면|서|지|게|아|어|여|자|니|까|랴|듯이|도록|더라도|지만|는가|은가)$/;
+const FAKE_NOUN = /(있을|없을|먹을|갈|할|줄)$/;      // 체언처럼 끝나지만 관형형 용언
+const FAKE_VERB = /(이다|입니다)$/;                  // 용언처럼 끝나지만 '체언+이다'
+const DETERMINER = /^(그|이|저|한|두|세|네|새|첫|온|모든|어느|무슨|웬)$/;
+const BOUND_NOUN = /^(수|것|줄|리|바|뿐|데|때|따름|나름|만큼)$/;   // 의존명사 뒤는 붙여 써야 자연스럽다
+const CONJUNCTION = /^(그래서|그러나|하지만|그리고|그런데|그러면|또한|따라서)$/;
+/* 보조용언 구성(-아/어 있다, -어 주다, -게 되다, -기 시작하다, -지 않다, -다 보면…)은 사이를 벌리지 않는다 */
+/* 한국어는 활용하면 음절이 바뀌므로(나가다->나간다) 어간 변이형까지 적는다 */
+const AUX_PAIRS = [
+  [/(아|어|여|워|해|져|라|러)$/, /^(있|없|주|준|줬|놓|놨|두|뒀|버리|버려|나가|나간|나갔|대|댄|가|간|갔|오|온|와)/],
+  [/게$/,   /^(되|된|돼|됐|하|한|했|만들|만든)/],
+  [/지$/,   /^(않|못|말)/],
+  [/기도$/, /^(하|한|했)/],
+  [/기$/,   /^(시작|마련|위해)/],
+  [/다$/,   /^(보|본|봤)/]
+];
+function isAux(prev, next){
+  return !!prev && AUX_PAIRS.some(([a,b]) => a.test(prev) && b.test(next));
+}
+
+function slotKind(next, prev){
+  if (DETERMINER.test(next) || CONJUNCTION.test(next)) return null;
+  if (prev && BOUND_NOUN.test(prev)) return null;
+  if (isAux(prev, next)) return null;
+  if (!FAKE_NOUN.test(next) && NOUN_TAIL.test(next)) return "adn";
+  if (!FAKE_VERB.test(next) && VERB_TAIL.test(next)){
+    return prev && DETERMINER.test(prev) ? null : "adv";   // 관형사 뒤엔 부사를 못 넣는다
+  }
+  return null;
+}
+
+/* ===================== 유틸 ===================== */
+const $ = s => document.querySelector(s);
+const app = $("#app");
+const rnd = n => Math.floor(Math.random()*n);
+const pick = a => a[rnd(a.length)];
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+
+const DOUBLE_JUNG = [9,10,11,14,15,16,19];
+const DOUBLE_JONG = [3,5,6,9,10,11,12,13,14,15,18];
+/* 두벌식 실제 키 입력 수 */
+function strokes(str){
+  let n = 0;
+  for (const ch of str){
+    const c = ch.charCodeAt(0) - 0xAC00;
+    if (c < 0 || c > 11171){ n += 1; continue; }
+    const jong = c % 28, jung = ((c - jong) / 28) % 21;
+    n += 1 + (DOUBLE_JUNG.includes(jung) ? 2 : 1) + (jong ? (DOUBLE_JONG.includes(jong) ? 2 : 1) : 0);
+  }
+  return n;
+}
+
+/* ===================== 문장 & 공격 ===================== */
+const MAX_HITS = 2;      // 한 문장이 받을 수 있는 최대 공격 수
+const SAFE_WORDS = 2;    // 지금 치는 어절에서 이만큼 뒤부터만 공격 가능
+
+function makeLine(src){
+  return {src, words:src.split(" "), tags:[], hits:0, dirty:new Set(), v:0};
+}
+const lineText = l => l.words.join(" ");
+
+/* 커서 위치가 몇 번째 어절인지 */
+function wordAt(line, pos){
+  let n = 0, seen = 0;
+  for (const w of line.words){
+    seen += w.length;
+    if (pos <= seen) return n;
+    seen += 1; n++;
+  }
+  return line.words.length - 1;
+}
+function shiftDirty(line, from){
+  line.dirty = new Set([...line.dirty].map(d => d >= from ? d + 1 : d));
+}
+
+function atkAnagram(l, min){
+  const cand = l.words.map((w,i)=>i).filter(i => i >= min && l.words[i].length >= 3);
+  if (!cand.length) return false;
+  const i = pick(cand), src = l.words[i];
+  for (let t=0; t<24; t++){
+    const a = [...src];
+    for (let k=a.length-1; k>0; k--){ const j = rnd(k+1); [a[k],a[j]] = [a[j],a[k]]; }
+    if (a.join("") !== src){ l.words[i] = a.join(""); l.dirty.add(i); return true; }
+  }
+  return false;
+}
+function atkInsert(l, min){
+  const ALL_SLANG = [...SLANG.adn, ...SLANG.adv];
+  const slots = [];
+  for (let i = Math.max(min, 1); i < l.words.length; i++){
+    if (ALL_SLANG.includes(l.words[i]) || ALL_SLANG.includes(l.words[i-1])) continue;  // 신조어 연타 방지
+    const k = slotKind(l.words[i], l.words[i-1]);
+    if (k) slots.push([i,k]);
+  }
+  if (!slots.length) return false;
+  const [i,k] = pick(slots);
+  l.words.splice(i, 0, pick(SLANG[k]));
+  shiftDirty(l, i); l.dirty.add(i);
+  return true;
+}
+function atkReorder(l, min){
+  const cand = [];
+  for (let i = Math.max(min,0); i < l.words.length - 1; i++) cand.push(i);
+  if (!cand.length) return false;
+  const i = pick(cand);
+  [l.words[i], l.words[i+1]] = [l.words[i+1], l.words[i]];
+  l.dirty.add(i); l.dirty.add(i+1);
+  return true;
+}
+const ATTACKS = {anagram:atkAnagram, insert:atkInsert, reorder:atkReorder};
+const ATTACK_NAMES = {anagram:"애너그램", insert:"끼워넣기", reorder:"순서섞기"};
+
+/* 한 종류가 안 먹으면 다른 종류로 대체 */
+function corrupt(line, min, kind){
+  const order = [kind, ...Object.keys(ATTACKS).filter(k => k !== kind)];
+  for (const k of order){
+    if (ATTACKS[k](line, min)){
+      line.hits++; line.v++;
+      if (!line.tags.includes(k)) line.tags.push(k);
+      return k;
+    }
+  }
+  return null;
+}
+
+/* ===================== 플레이어 ===================== */
+let G = null;
+
+class Player{
+  constructor(id, name, bot){
+    this.id = id; this.name = name; this.bot = bot;
+    this.queue = []; this.idx = 0;
+    this.typed = ""; this.done = 0; this.alive = true; this.rank = 0;
+    this.strokes = 0; this.keys = 0;
+    this.startedAt = 0; this.cps = 0; this.pauseUntil = 0; this.lastChar = 0;
+    this.fill();
+  }
+  fill(){
+    while (this.queue.length < this.idx + 4){
+      let t, guard = 0;
+      do { t = pick(SENTENCES); guard++; }
+      while (guard < 8 && this.queue.slice(-3).some(l => l.src === t));
+      this.queue.push(makeLine(t));
+    }
+  }
+  get line(){ return this.queue[this.idx]; }
+  get text(){ return lineText(this.line); }
+  get progress(){ return Math.min(1, this.typed.length / this.text.length); }
+  get score(){ return this.done * 1000 + this.progress * 999; }
+  /* 아직 안 친 구간에 박혀 있는 공격 수 */
+  get incoming(){
+    let n = this.line.hits;
+    for (let i = this.idx + 1; i <= this.idx + 3; i++) n += this.queue[i] ? this.queue[i].hits : 0;
+    return n;
+  }
+
+  /* 1순위는 지금 치는 문장. 단 커서에서 SAFE_WORDS 어절 뒤부터만 건드린다(친 부분 불가침).
+     한 문장이 MAX_HITS를 넘으면 다음 문장으로 밀어 넣는다. */
+  hit(kind, from){
+    this.fill();
+    const cur = this.line;
+    const safe = wordAt(cur, this.typed.length) + SAFE_WORDS;
+    const slots = [];
+    if (safe < cur.words.length) slots.push([cur, safe]);
+    for (let i = this.idx + 1; i <= this.idx + 3; i++) slots.push([this.queue[i], 0]);
+
+    let applied = null, where = null;
+    for (const [l,min] of slots){ if (l.hits < MAX_HITS && (applied = corrupt(l, min, kind))){ where = l; break; } }
+    if (!applied) for (const [l,min] of slots){ if ((applied = corrupt(l, min, kind))){ where = l; break; } }
+    if (!applied) return;
+
+    feed(`${from.name} → ${this.name} · ${ATTACK_NAMES[applied]}`, this === G.me ? "dmg" : "");
+    if (this === G.me){
+      toast(ATTACK_NAMES[applied] + (where === cur ? " · 치는 중인 문장!" : ""), "atk");
+      if (where === cur) G.rebuild = true;
+    } else {
+      bump("#foe-" + this.id);
+    }
+  }
+
+  complete(){
+    const txt = this.text;
+    const secs = (performance.now() - this.startedAt) / 1000;
+    this.done++; this.strokes += strokes(txt);
+    this.idx++; this.typed = ""; this.startedAt = performance.now();
+    this.fill();
+    const n = (txt.length / Math.max(secs, .1)) > 2.6 ? 2 : 1;
+    for (let i=0;i<n;i++) sendAttack(this);
+    if (this === G.me){
+      feed(`문장 완료 · 공격 ${n}발`, "me");
+      if (n === 2) toast("PERFECT · 2연타", "good");
+      G.slide = true;
+    }
+  }
+}
+
+/* 멀티 전환 지점: target.hit(...) 대신 소켓으로 {from,to,kind}를 보내고
+   수신 이벤트에서 해당 Player.hit()을 부르면 나머지 로직은 그대로 재사용된다. */
+function sendAttack(from){
+  const foes = G.players.filter(p => p.alive && p !== from);
+  if (!foes.length) return;
+  let target = (from === G.me && G.target) ? foes.find(p => p.id === G.target) : null;
+  if (!target) target = Math.random() < .45 ? foes.slice().sort((a,b)=>b.score-a.score)[0] : pick(foes);
+  target.hit(pick(Object.keys(ATTACKS)), from);
+}
+
+/* ===================== UI 헬퍼 ===================== */
+function toast(msg, cls=""){
+  const d = document.createElement("div");
+  d.className = "tst " + cls; d.textContent = msg;
+  $("#toast").appendChild(d);
+  setTimeout(()=>d.remove(), 1300);
+}
+function feed(msg, cls=""){
+  const box = $("#feed"); if (!box) return;
+  const d = document.createElement("div");
+  d.className = "ev " + cls; d.textContent = msg;
+  box.prepend(d);
+  while (box.children.length > 7) box.lastChild.remove();
+}
+function bump(sel){
+  const el = $(sel); if (!el) return;
+  el.classList.remove("hit"); void el.offsetWidth; el.classList.add("hit");
+  setTimeout(()=>el.classList.remove("hit"), 520);
+}
+
+/* ===================== 메뉴 ===================== */
+const CFG = {diff:"normal", bots:2};
+const DIFF = {easy:{cps:1.3,label:"쉬움"}, normal:{cps:2.1,label:"보통"}, hard:{cps:3.3,label:"어려움"}};
+
+function menu(){
+  app.innerHTML = `
+  <div class="menu">
+    <div class="kicker">TYPING BATTLE ROYALE</div>
+    <div class="logo">타자 <em>배틀로얄</em></div>
+    <div class="sub">문장을 완성하면 상대 문장이 망가진다 · 20초마다 꼴찌 탈락</div>
+    <div class="opts">
+      <div class="opt"><h4>봇 난이도</h4><div class="seg" id="segDiff">
+        ${Object.entries(DIFF).map(([k,v])=>`<button data-k="${k}" class="${k===CFG.diff?"on":""}">${v.label}</button>`).join("")}
+      </div></div>
+      <div class="opt"><h4>봇 수</h4><div class="seg" id="segBots">
+        ${[2,3,5,7].map(n=>`<button data-k="${n}" class="${n===CFG.bots?"on":""}">${n}</button>`).join("")}
+      </div></div>
+    </div>
+    <button class="btn" id="go">연습 모드 시작</button>
+    <button class="btn ghost" disabled>멀티플레이 준비중</button>
+    <div class="cards">
+      <div class="card"><b>애너그램</b><p>단어 글자를 섞는다.</p><div class="ex">언제인가를 → 언인가제를</div></div>
+      <div class="card"><b>끼워넣기</b><p>신조어를 문법 맞는 자리에 밀어 넣는다.</p><div class="ex">뒷모습은 미친 아름답다</div></div>
+      <div class="card"><b>순서섞기</b><p>어절 순서를 뒤바꾼다.</p><div class="ex">가장 밝은 → 밝은 가장</div></div>
+      <div class="card"><b>불가침</b><p>친 부분과 바로 다음 한 어절은 안전. 그 뒤부터 실시간으로 망가진다.</p></div>
+    </div>
+  </div>`;
+  const seg = (id,key,cast) => $(id).addEventListener("click", e=>{
+    const b = e.target.closest("button"); if (!b) return;
+    CFG[key] = cast(b.dataset.k);
+    [...e.currentTarget.children].forEach(c=>c.classList.toggle("on", c===b));
+  });
+  seg("#segDiff","diff",String);
+  seg("#segBots","bots",Number);
+  $("#go").addEventListener("click", start);
+}
+
+/* ===================== 게임 ===================== */
+const ELIM_MS = 20000;
+const BOT_NAMES = ["알파","베타","감마","델타","엡실론","제타","에타"];
+
+function start(){
+  const base = DIFF[CFG.diff].cps;
+  G = {players:[], me:null, target:null, running:true, nextElim:0, t0:0,
+       tick:null, composing:false, slide:false, sliding:false, rebuild:false, ver:-1, spans:[], hadErr:false};
+  G.me = new Player("me","나",false);
+  G.players.push(G.me);
+  for (let i=0;i<CFG.bots;i++){
+    const b = new Player("b"+i, "봇 "+BOT_NAMES[i], true);
+    b.cps = base * (0.85 + Math.random()*0.3);
+    G.players.push(b);
+  }
+  G.t0 = performance.now();
+  G.nextElim = G.t0 + ELIM_MS;
+  G.players.forEach(p => { p.startedAt = G.t0; p.lastChar = G.t0; });
+  renderGame();
+  // 렌더까지 이 인터벌 하나로 돌린다. requestAnimationFrame은 탭이 가려지거나
+  // 임베드 뷰어에서 멈춰버려서 화면이 통째로 얼어붙는다.
+  G.tick = setInterval(loop, 25);
+}
+
+function renderGame(){
+  app.innerHTML = `
+  <div class="hud" id="hud">
+    <span class="tleft" id="tleft">다음 탈락 20.0초</span>
+    <span class="tick"><i id="tbar"></i></span>
+    <span class="stat"><b class="num" id="sCpm">0</b><u>타/분</u></span>
+    <span class="stat"><b class="num" id="sAcc">100</b><u>%</u></span>
+    <span class="stat"><b class="num" id="sDone">0</b><u>문장</u></span>
+    <span class="stat"><b class="num" id="sRank">1</b><u>위</u></span>
+  </div>
+  <div class="stage">
+    <div>
+      <div class="board" id="board">
+        <div class="rail"><div class="track" id="track"></div></div>
+        <div class="hint" id="hint"></div>
+        <input id="type" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="blur" id="blur">클릭해서 계속 입력</div>
+      </div>
+      <div class="feed" id="feed"></div>
+    </div>
+    <div>
+      <div class="foes" id="foes"></div>
+      <div class="aim">상대를 클릭하면 집중 공격</div>
+    </div>
+  </div>`;
+
+  $("#foes").addEventListener("click", e=>{
+    const c = e.target.closest(".foe"); if (!c) return;
+    const p = G.players.find(x => x.id === c.dataset.id);
+    if (!p || !p.alive) return;
+    G.target = G.target === p.id ? null : p.id;
+    $("#type").focus();
+  });
+
+  const inp = $("#type");
+  inp.addEventListener("compositionstart", ()=> G.composing = true);
+  inp.addEventListener("compositionend", ()=>{ G.composing = false; onInput(); });
+  inp.addEventListener("input", onInput);
+  inp.addEventListener("keydown", e=>{
+    if (e.key.length === 1 || e.key === "Process" || e.key === "Backspace") G.me.keys++;
+  });
+  inp.addEventListener("blur", ()=> $("#blur").classList.add("on"));
+  inp.addEventListener("focus", ()=> $("#blur").classList.remove("on"));
+  $("#blur").addEventListener("click", ()=> inp.focus());
+  document.addEventListener("click", ()=>{ if (G && G.running) inp.focus(); });
+  inp.focus();
+  buildRows();
+  addEventListener("resize", fitAll);
+}
+
+function onInput(){
+  if (!G || !G.running || !G.me.alive) return;
+  const inp = $("#type");
+  G.me.typed = inp.value;
+  if (G.me.typed === G.me.text){
+    G.me.complete();
+    inp.value = ""; G.me.typed = "";
+  }
+}
+
+/* ---------- 문장 트랙 ---------- */
+function rowHtml(line, cls){
+  let h = "";
+  line.words.forEach((w,i)=>{
+    if (i) h += `<span class="ch sp"> </span>`;
+    const dt = line.dirty.has(i);
+    for (const c of w) h += `<span class="ch${dt?" dt":""}"${dt?' data-dt="1"':""}>${esc(c)}</span>`;
+  });
+  return `<div class="row ${cls}"><span class="fit">${h}</span></div>`;
+}
+function buildRows(){
+  const me = G.me, q = me.queue;
+  $("#track").innerHTML =
+      (me.idx > 0 ? rowHtml(q[me.idx-1], "past") : `<div class="row past"></div>`)
+    + rowHtml(q[me.idx], "cur")
+    + rowHtml(q[me.idx+1], "next");
+  const fit = $(".row.cur .fit");
+  G.spans = [...fit.querySelectorAll(".ch")];
+  G.tail = document.createElement("span");          // 문장 길이를 넘겨 친 글자
+  G.tail.className = "ch no tail";
+  fit.appendChild(G.tail);
+  G.ver = me.idx * 1000 + me.line.v;
+  fitAll();
+}
+function fitAll(){
+  for (const row of document.querySelectorAll(".rail .row")){
+    const span = row.querySelector(".fit"); if (!span) continue;
+    span.style.transform = "scale(1)";
+    const avail = row.clientWidth - 12, w = span.scrollWidth;
+    if (w > avail) span.style.transform = `scale(${(avail/w).toFixed(4)})`;
+  }
+}
+function advance(){
+  const track = $("#track"), h = $(".rail .row").offsetHeight;
+  G.sliding = true;
+  track.classList.add("go");
+  track.style.transform = `translateY(${-2*h}px)`;
+  setTimeout(()=>{
+    track.classList.remove("go");
+    track.style.transform = "";
+    G.sliding = false;
+    buildRows();
+  }, 420);
+}
+
+/* ---------- 루프 ---------- */
+function loop(){
+  if (!G.running) return;
+  const now = performance.now();
+
+  for (const p of G.players){
+    if (!p.alive || !p.bot || now < p.pauseUntil) continue;
+    const txt = p.text;
+    const slow = Math.max(.5, 1 - .2 * p.line.hits);
+    const need = 1000 / (p.cps * slow);
+    while (now - p.lastChar >= need && p.typed.length < txt.length){
+      p.lastChar += need;
+      p.typed = txt.slice(0, p.typed.length + 1);
+      if (Math.random() < .015 + .02 * p.line.hits){
+        p.pauseUntil = now + 250 + rnd(650);
+        p.lastChar = p.pauseUntil;
+        break;
+      }
+    }
+    if (p.typed.length >= txt.length){ p.complete(); p.lastChar = now; }
+  }
+
+  if (now >= G.nextElim){ eliminate(); G.nextElim = now + ELIM_MS; }
+  if (G.running) draw();
+}
+
+function eliminate(){
+  const alive = G.players.filter(p => p.alive);
+  if (alive.length <= 1) return;
+  const loser = alive.slice().sort((a,b)=>a.score-b.score)[0];
+  loser.alive = false; loser.rank = alive.length;
+  feed(`${loser.name} 탈락 · ${alive.length}위`, "out");
+  if (loser === G.me) return over(false);
+  toast(loser.name + " 탈락");
+  if (G.target === loser.id) G.target = null;
+  const left = G.players.filter(p => p.alive);
+  if (left.length === 1 && left[0] === G.me){ left[0].rank = 1; over(true); }
+}
+
+function over(win){
+  G.running = false;
+  clearInterval(G.tick);
+  const me = G.me; me.rank = me.rank || 1;
+  const mins = (performance.now() - G.t0) / 60000;
+  app.innerHTML = `
+  <div class="over">
+    <div class="big ${win?"win":""}">${win ? "WINNER" : me.rank + "위"}</div>
+    <p>${win ? "마지막까지 살아남았다" : `${G.players.length}명 중 ${me.rank}위`}</p>
+    <div class="final">
+      <div class="card"><b class="num">${Math.round(me.strokes / Math.max(mins,.01))}</b><u>평균 타/분</u></div>
+      <div class="card"><b class="num">${me.done}</b><u>완료 문장</u></div>
+      <div class="card"><b class="num">${Math.round(mins*60)}</b><u>생존 초</u></div>
+    </div>
+    <button class="btn" id="again">다시 하기</button>
+    <button class="btn ghost" id="back">메뉴로</button>
+  </div>`;
+  $("#again").addEventListener("click", start);
+  $("#back").addEventListener("click", menu);
+}
+
+/* ---------- 렌더 ---------- */
+function draw(){
+  const now = performance.now(), me = G.me;
+
+  if (G.slide){ G.slide = false; G.rebuild = false; advance(); }
+  else if (!G.sliding && (G.rebuild || G.ver !== me.idx*1000 + me.line.v)){ G.rebuild = false; buildRows(); }
+
+  const left = Math.max(0, G.nextElim - now);
+  $("#tleft").textContent = `다음 탈락 ${(left/1000).toFixed(1)}초`;
+  $("#tbar").style.width = Math.min(100, left / ELIM_MS * 100) + "%";
+  $("#hud").classList.toggle("danger", left < 5000);
+
+  // 글자 상태
+  const t = me.text, typed = me.typed;
+  let bad = false;
+  for (let i=0;i<G.spans.length;i++){
+    const s = G.spans[i];
+    let st = "";
+    if (i < typed.length){
+      if (G.composing && i === typed.length-1) st = "comp";
+      else if (typed[i] === t[i]) st = "ok";
+      else { st = "no"; bad = true; }
+    } else if (i === typed.length) st = "cur";
+    if (s.dataset.st !== st){
+      s.dataset.st = st;
+      s.className = "ch" + (s.dataset.dt ? " dt" : "") + (st ? " " + st : "");
+    }
+    // '가' 자리에 '그'를 치면 '그'가 보여야 한다
+    const want = i < typed.length ? typed[i] : t[i];
+    if (s.textContent !== want) s.textContent = want;
+  }
+  const extra = typed.length > t.length ? typed.slice(t.length) : "";
+  if (G.tail.textContent !== extra) G.tail.textContent = extra;
+  if (extra) bad = true;
+  if (bad && !G.hadErr){
+    const row = $(".row.cur");
+    if (row){ row.classList.remove("shake"); void row.offsetWidth; row.classList.add("shake"); }
+  }
+  G.hadErr = bad;
+
+  const inc = me.incoming;
+  $("#hint").innerHTML = inc ? `대기 중인 공격 <b>${inc}</b>` : "";
+
+  const mins = (now - G.t0) / 60000;
+  const good = [...typed].filter((c,i)=>c === t[i]).join("");
+  $("#sCpm").textContent = Math.round((me.strokes + strokes(good)) / Math.max(mins,.01));
+  $("#sAcc").textContent = me.keys ? Math.min(100, Math.round((me.strokes + strokes(good)) / me.keys * 100)) : 100;
+  $("#sDone").textContent = me.done;
+
+  const ranked = G.players.filter(p=>p.alive).sort((a,b)=>b.score-a.score);
+  $("#sRank").textContent = ranked.indexOf(me) + 1;
+
+  const foes = G.players.filter(p => p !== me), box = $("#foes");
+  if (box.children.length !== foes.length){
+    box.innerHTML = foes.map(p=>`
+      <div class="foe" id="foe-${p.id}" data-id="${p.id}">
+        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}</span><span class="dn"></span></div>
+        <div class="pbar"><i></i></div>
+        <div class="meta"><span class="load"></span><span class="sp"></span></div>
+      </div>`).join("");
+  }
+  for (const p of foes){
+    const el = $("#foe-"+p.id); if (!el) continue;
+    el.classList.toggle("dead", !p.alive);
+    el.classList.toggle("target", G.target === p.id);
+    el.querySelector(".pbar i").style.width = (p.progress*100) + "%";
+    el.querySelector(".dn").textContent = p.done + "문장";
+    el.querySelector(".rk").textContent = p.alive ? (ranked.indexOf(p)+1) + "위" : "OUT";
+    el.querySelector(".load").textContent = p.alive && p.incoming ? "적재 " + p.incoming : "";
+    el.querySelector(".sp").textContent = p.alive ? Math.round(p.cps*2.4*60) + "타/분" : "";
+  }
+
+}
+
+menu();
+</script>
+</body>
+</html>
