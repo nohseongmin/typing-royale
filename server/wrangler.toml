@@ -8,4 +8,4 @@ class_name = "Room"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["Room"]
+new_sqlite_classes = ["Room"]   # 무료 플랜의 Durable Object는 SQLite 백엔드만 된다
