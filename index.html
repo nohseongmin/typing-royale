@@ -468,7 +468,7 @@ function bump(sel){
 /* ===================== 네트워크 =====================
    Cloudflare Worker + Durable Object. 방 하나가 DO 인스턴스 하나다.
    ?server=... 로 덮어쓸 수 있어서 로컬 개발 서버나 자체 호스팅도 붙는다. */
-const DEFAULT_SERVER = "";
+const DEFAULT_SERVER = "https://typing-royale.typing-royale-server.workers.dev";
 const SERVER = new URLSearchParams(location.search).get("server") || DEFAULT_SERVER;
 const httpBase = () => SERVER.replace(/^ws/, "http").replace(/\/+$/, "");
 const wsBase   = () => SERVER.replace(/^http/, "ws").replace(/\/+$/, "");
