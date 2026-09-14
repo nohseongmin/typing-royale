@@ -193,133 +193,87 @@ body.risk{background:#fff1f2}   /* 지금 꼴찌 = 다음 탈락 대상 */
 "use strict";
 
 /* ===================== 문장 풀 ===================== */
+/* [신조어]단어 는 "그 단어 앞에 이 신조어를 끼워 넣을 수 있다"는 표시다. [a|b] 는 둘 중 하나.
+   품사만 보고 자동으로 넣으면 "샤갈 세상에서"처럼 말이 안 되는 조합이 나와서,
+   끼워 넣어도 말이 되고 웃긴 자리를 문장마다 직접 골랐다. */
 const SENTENCES = [
-  "떠나갈 때가 언제인가를 분명히 알고 가는 이의 뒷모습은 아름답다",
-  "바람이 부는 날에는 창문을 열고 하늘을 오래 바라보았다",
-  "작은 일에도 최선을 다하는 사람이 결국 큰 일을 해낸다",
-  "오늘 걷지 않으면 내일은 뛰어야 한다는 말을 기억하자",
-  "책을 읽는 시간은 세상에서 가장 조용한 여행이 된다",
-  "한 걸음씩 나아가다 보면 어느새 정상에 닿아 있다",
-  "밤하늘의 별은 언제나 그 자리에서 우리를 기다린다",
-  "실패는 성공으로 가는 길에 놓인 작은 돌다리일 뿐이다",
-  "가장 어두운 밤이 지나야 가장 밝은 아침이 찾아온다",
-  "노력은 배신하지 않는다는 말을 나는 아직도 믿는다",
-  "커피 한 잔의 여유가 하루의 피로를 씻어 주기도 한다",
-  "봄이 오면 얼었던 강물도 소리를 내며 흐르기 시작한다",
-  "사람의 마음을 얻는 일이 세상에서 가장 어려운 일이다",
-  "좋은 습관 하나가 인생의 방향을 완전히 바꾸어 놓는다",
-  "여름 소나기가 지나간 자리에 무지개가 걸리기도 한다",
-  "손끝에서 만들어진 문장이 생각보다 멀리 퍼져 나간다",
-  "천천히 가더라도 멈추지 않으면 결국 도착하게 된다",
-  "낡은 골목길에도 저마다의 이야기가 조용히 쌓여 있다",
-  "겨울이 길수록 봄을 기다리는 마음은 더욱 간절해진다",
-  "누구에게나 처음은 서툴고 그래서 더 아름다운 법이다",
-  "새벽에 일어나 마시는 물 한 잔이 하루를 깨워 준다",
-  "기록하지 않은 기억은 시간이 지나면 흐려지기 마련이다",
-  "산은 언제나 그 자리에 있지만 오르는 길은 매번 다르다",
-  "친구의 말 한마디가 무너진 하루를 다시 세워 주었다",
-  "빠른 손보다 정확한 손이 결국 더 멀리 나아가게 된다",
-  "계절이 바뀌는 것을 느끼는 순간 나도 조금 자라 있었다",
-  "어제의 나보다 조금 더 나은 오늘을 살아가면 충분하다",
-  "생각을 글로 옮기는 순간 흐릿하던 것들이 또렷해진다",
-  "길을 잃어 본 사람만이 새로운 길을 찾아낼 수 있다",
-  "지금 이 순간에 집중하는 것이 가장 확실한 방법이다"
+  "떠나갈 때가 언제인가를 [무지성으로]분명히 알고 가는 이의 [꾸안꾸|밤티]뒷모습은 [오지게|준내]아름답다",
+  "바람이 [개|준내]부는 날에는 [갬성]창문을 열고 하늘을 오래 [멍때리며]바라보았다",
+  "작은 일에도 [영끌]최선을 [킹받게]다하는 사람이 결국 큰 일을 [알잘딱]해낸다",
+  "오늘 [눈치껏]걷지 않으면 내일은 [무지성으로]뛰어야 한다는 [라떼]말을 기억하자",
+  "책을 [멍때리며]읽는 [갓생]시간은 세상에서 가장 조용한 [가성비]여행이 된다",
+  "한 걸음씩 [존버하며]나아가다 보면 어느새 [킹받는]정상에 닿아 있다",
+  "밤하늘의 [인싸]별은 언제나 그 자리에서 [아싸]우리를 [킹받게]기다린다",
+  "실패는 성공으로 가는 [밤티]길에 놓인 작은 [억까]돌다리일 뿐이다",
+  "가장 어두운 [흑역사]밤이 지나야 가장 밝은 [럭키비키]아침이 [킹받게]찾아온다",
+  "노력은 [핵]배신하지 않는다는 [꼰대]말을 나는 아직도 [무지성으로]믿는다",
+  "커피 한 잔의 [갓생]여유가 [월루]하루의 피로를 [개]씻어 주기도 한다",
+  "봄이 [눈치껏]오면 얼었던 강물도 [킹받는]소리를 내며 [무지성으로]흐르기 시작한다",
+  "사람의 [찐]마음을 얻는 일이 세상에서 가장 [개|핵|준내]어려운 일이다",
+  "좋은 [갓생]습관 하나가 [킹받는]인생의 방향을 완전히 [알잘딱]바꾸어 놓는다",
+  "여름 [킹받는]소나기가 지나간 자리에 [미친|럭키비키]무지개가 걸리기도 한다",
+  "손끝에서 만들어진 [뇌절]문장이 생각보다 [밈처럼]멀리 퍼져 나간다",
+  "천천히 [존버하며]가더라도 멈추지 않으면 결국 [알잘딱]도착하게 된다",
+  "낡은 [힙한]골목길에도 저마다의 [흑역사]이야기가 조용히 [쫌쫌따리]쌓여 있다",
+  "겨울이 [오지게]길수록 봄을 기다리는 [찐]마음은 더욱 [개|준내]간절해진다",
+  "누구에게나 처음은 [개|핵]서툴고 그래서 더 [오지게]아름다운 법이다",
+  "새벽에 [무지성으로]일어나 마시는 [존맛]물 한 잔이 [갓생]하루를 깨워 준다",
+  "기록하지 않은 [흑역사]기억은 시간이 지나면 [킹받게]흐려지기 마련이다",
+  "산은 언제나 그 자리에 [눈치없이]있지만 오르는 [밤티]길은 매번 [개]다르다",
+  "친구의 [찐]말 한마디가 무너진 [멘붕]하루를 다시 [알잘딱]세워 주었다",
+  "빠른 [광클]손보다 [쓸데없이]정확한 손이 결국 더 멀리 나아가게 된다",
+  "계절이 [킹받게]바뀌는 것을 느끼는 [현타]순간 나도 조금 [폭풍]자라 있었다",
+  "어제의 [흑역사]나보다 조금 더 나은 [갓생]오늘을 [존버하며]살아가면 충분하다",
+  "생각을 글로 [무지성으로]옮기는 순간 흐릿하던 것들이 [핵]또렷해진다",
+  "길을 [야무지게]잃어 본 [찐]사람만이 새로운 [밤티]길을 찾아낼 수 있다",
+  "지금 이 [도파민]순간에 [무지성으로]집중하는 것이 가장 확실한 [국룰]방법이다"
 ];
 
-/* 끼워넣기 단어는 신조어만. 품사에 맞는 자리에만 들어간다.
-   adn = 관형어(체언 앞)  /  adv = 부사(용언·부사 앞) */
-const SLANG = {
-  adn: ["미친","도른","야르한","찐","킹받는","개쩌는","샤갈"],
-  adv: ["준내","개","핵","겁나","오지게","킹받게"]
-};
-
-/* 삽입 자리 판정. 확실할 때만 자리로 인정하고 애매하면 버린다(자리 수보다 문법이 우선).
-   adn = 뒤가 확실한 체언 -> 관형어를 넣는다
-   adv = 뒤가 확실한 용언·부사 -> 부사를 넣는다
-   은/는/이/가/도/만/로 는 용언 어미와 겹쳐서(않는다는·아직도·있지만) 체언 판정에서 뺐다. */
-const NOUN_TAIL = /(을|를|의|에|에서|에게|께|보다|처럼|마다|까지|부터)$/;
-const VERB_TAIL = /(다|고|며|면|서|지|게|아|어|여|자|니|까|랴|듯이|도록|더라도|지만|는가|은가)$/;
-const FAKE_NOUN = /(있을|없을|먹을|갈|할|줄)$/;      // 체언처럼 끝나지만 관형형 용언
-const FAKE_VERB = /(이다|입니다)$/;                  // 용언처럼 끝나지만 '체언+이다'
-const DETERMINER = /^(그|이|저|한|두|세|네|새|첫|온|모든|어느|무슨|웬)$/;
-const BOUND_NOUN = /^(수|것|줄|리|바|뿐|데|때|따름|나름|만큼)$/;   // 의존명사 뒤는 붙여 써야 자연스럽다
-const CONJUNCTION = /^(그래서|그러나|하지만|그리고|그런데|그러면|또한|따라서)$/;
-/* 보조용언 구성(-아/어 있다, -어 주다, -게 되다, -기 시작하다, -지 않다, -다 보면…)은 사이를 벌리지 않는다 */
-/* 한국어는 활용하면 음절이 바뀌므로(나가다->나간다) 어간 변이형까지 적는다 */
-const AUX_PAIRS = [
-  [/(아|어|여|워|해|져|라|러)$/, /^(있|없|주|준|줬|놓|놨|두|뒀|버리|버려|나가|나간|나갔|대|댄|가|간|갔|오|온|와)/],
-  [/게$/,   /^(되|된|돼|됐|하|한|했|만들|만든)/],
-  [/지$/,   /^(않|못|말)/],
-  [/기도$/, /^(하|한|했)/],
-  [/기$/,   /^(시작|마련|위해)/],
-  [/다$/,   /^(보|본|봤)/]
-];
-function isAux(prev, next){
-  return !!prev && AUX_PAIRS.some(([a,b]) => a.test(prev) && b.test(next));
-}
-
-function slotKind(next, prev){
-  if (DETERMINER.test(next) || CONJUNCTION.test(next)) return null;
-  if (prev && BOUND_NOUN.test(prev)) return null;
-  if (isAux(prev, next)) return null;
-  if (!FAKE_NOUN.test(next) && NOUN_TAIL.test(next)) return "adn";
-  if (!FAKE_VERB.test(next) && VERB_TAIL.test(next)){
-    return prev && DETERMINER.test(prev) ? null : "adv";   // 관형사 뒤엔 부사를 못 넣는다
-  }
-  return null;
-}
-
-/* ===================== 영타 ===================== */
 const SENTENCES_EN = [
-  "The quiet river runs through the old town",
-  "Every small step brings you closer to the top",
-  "She opened the window and watched the rain fall",
-  "Good habits slowly change the shape of your life",
-  "The stars wait for us in the same place every night",
-  "A warm cup of coffee can save a long day",
-  "He wrote a short letter to his best friend",
-  "The morning light spilled across the kitchen floor",
-  "Our team finished the project just before midnight",
-  "The cat slept on the warm edge of the bed",
-  "Fast hands matter less than careful hands",
-  "They walked along the beach until the sun went down",
-  "This old road leads to a small village by the sea",
-  "The wind carried the smell of fresh bread",
-  "Reading a good book feels like a quiet journey",
-  "The children laughed as the snow covered the yard",
-  "My brother fixed the broken bike in one afternoon",
-  "The city looks different when the lights come on",
-  "Every mistake teaches you something new",
-  "The train left the station right on time",
-  "Her voice filled the empty hall with music",
-  "The leaves turned red and gold in early autumn",
-  "We planted a tree in the corner of the garden",
-  "The old clock on the wall stopped at noon",
-  "Keep going even when the road feels long",
-  "The baker opens his shop before the sun rises",
-  "A single idea can change the whole world",
-  "The dog waited by the door for its owner",
-  "Clear goals make hard work feel lighter",
-  "The mountain looked calm under the gray sky"
+  "The [sus]quiet river [lowkey]runs through the [cursed]old town",
+  "Every [goated]small step [lowkey]brings you closer to the top",
+  "She opened the [cursed]window and [lowkey]watched the rain fall",
+  "Good [goated]habits slowly change the shape of your [mid]life",
+  "The [delulu]stars [lowkey]wait for us in the same place every [unhinged]night",
+  "A warm cup of [bussin]coffee can [literally]save a long day",
+  "He wrote a [cringe]short letter to his [goated]best friend",
+  "The morning light [lowkey]spilled across the [crusty]kitchen floor",
+  "Our [sweaty]team finished the [mid]project just before midnight",
+  "The [chonky]cat [lowkey]slept on the warm edge of the bed",
+  "Fast [sweaty]hands matter less than [npc]careful hands",
+  "They walked along the [aesthetic]beach until the sun [lowkey]went down",
+  "This [cursed]old road leads to a small [sus]village by the sea",
+  "The wind [lowkey]carried the smell of [bussin]fresh bread",
+  "Reading a [goated]good book [lowkey]feels like a quiet journey",
+  "The [feral]children laughed as the [cursed]snow covered the yard",
+  "My [goated]brother [lowkey]fixed the [cursed]broken bike in one afternoon",
+  "The city [lowkey]looks different when the [aesthetic]lights come on",
+  "Every [cringe]mistake [literally]teaches you something new",
+  "The [goated]train [literally]left the station right on time",
+  "Her voice filled the [sus]empty hall with [bussin]music",
+  "The [basic]leaves [lowkey]turned red and gold in early autumn",
+  "We planted a [sus]tree in the corner of the [aesthetic]garden",
+  "The [cursed]old clock on the wall [lowkey]stopped at noon",
+  "Keep going even when the [mid]road [lowkey]feels long",
+  "The [goated]baker opens his [bussin]shop before the sun rises",
+  "A single [unhinged]idea can [literally]change the whole world",
+  "The [clingy]dog waited by the door for its [npc]owner",
+  "Clear [delulu]goals make [sweaty]hard work feel lighter",
+  "The mountain [lowkey]looked calm under the [moody]gray sky"
 ];
 
-/* 영어 끼워넣기도 문법 자리만 쓴다.
-   adj = 한정사(the, my…) 바로 뒤 -> 형용사 / adv = 동사 사전에 있는 단어 바로 앞 -> 부사
-   a/an 뒤는 끼운 단어 발음에 따라 관사가 바뀌어야 해서(a based / an sus) 뺐다. */
-const SLANG_EN = {
-  adj: ["sus","based","cursed","goated","mid"],
-  adv: ["lowkey","highkey","literally","kinda"]
-};
-const DETERMINER_EN = /^(the|my|your|his|her|our|their|its|this|every)$/i;
-const VERBS_EN = new Set(("runs brings opened watched fall change wait save wrote spilled finished slept matter " +
-  "walked went leads carried feels feel laughed covered fixed looks come teaches left filled turned planted " +
-  "stopped opens rises waited make looked").split(" "));
-
-function slotKindEn(next, prev){
-  if (prev && DETERMINER_EN.test(prev)) return "adj";
-  if (VERBS_EN.has(next.toLowerCase())) return "adv";
-  return null;
+/* "[준내]달려간다" 표시를 떼어 내고 {text, slots:[{before, word}]} 로 푼다 */
+function parseLine(raw){
+  const words = [], slots = [];
+  for (const tok of raw.split(" ")){
+    const m = tok.match(/^\[([^\]]+)\](.+)$/);
+    const word = m ? m[2] : tok;
+    if (m) for (const w of m[1].split("|")) slots.push({before: word, word: w});
+    words.push(word);
+  }
+  return {text: words.join(" "), slots};
 }
+const POOL_KO = SENTENCES.map(parseLine), POOL_EN = SENTENCES_EN.map(parseLine);
 
 /* ===================== 유틸 ===================== */
 const $ = s => document.querySelector(s);
@@ -365,15 +319,17 @@ function firstWrong(typed, target, composing){
 const KO_STROKES_PER_CHAR = 2.4;
 const FAST_STROKES_PER_SEC = 6.2;   // 이보다 빠르게 문장을 끝내면 공격 2발
 const strokesPerChar = () => CFG.lang === "en" ? 1 : KO_STROKES_PER_CHAR;
-const sentences = () => CFG.lang === "en" ? SENTENCES_EN : SENTENCES;
+const sentences = () => CFG.lang === "en" ? POOL_EN : POOL_KO;
 
 /* ===================== 문장 & 공격 ===================== */
 const MAX_HITS = 2;      // 한 문장이 받을 수 있는 최대 공격 수
 const SAFE_WORDS = 2;    // 지금 치는 어절에서 이만큼 뒤부터만 공격 가능
 
-function makeLine(src){
+function makeLine(entry){
   // swapped/shuffled: 이미 순서섞기·애너그램 당한 어절. 같은 공격이 두 번 들어가면 원래대로 돌아올 수 있다.
-  return {src, words:src.split(" "), tags:[], hits:0, dirty:new Set(), swapped:new Set(), shuffled:new Set(), v:0};
+  // inserted: 끼워 넣은 신조어 자리 / slots: 이 문장에서 아직 쓸 수 있는 신조어 자리
+  return {src:entry.text, words:entry.text.split(" "), slots:entry.slots.slice(), tags:[], hits:0,
+          dirty:new Set(), swapped:new Set(), shuffled:new Set(), inserted:new Set(), v:0};
 }
 const lineText = l => l.words.join(" ");
 
@@ -390,7 +346,8 @@ function wordAt(line, pos){
 /* 어절을 끼워 넣으면 그 뒤 표시들의 위치도 한 칸씩 민다 */
 function shiftMarks(line, from){
   const shift = set => new Set([...set].map(d => d >= from ? d + 1 : d));
-  line.dirty = shift(line.dirty); line.swapped = shift(line.swapped); line.shuffled = shift(line.shuffled);
+  line.dirty = shift(line.dirty); line.swapped = shift(line.swapped);
+  line.shuffled = shift(line.shuffled); line.inserted = shift(line.inserted);
 }
 
 function atkAnagram(l, min){
@@ -405,19 +362,17 @@ function atkAnagram(l, min){
   return false;
 }
 function atkInsert(l, min){
-  const en = CFG.lang === "en";
-  const slang = en ? SLANG_EN : SLANG, kindOf = en ? slotKindEn : slotKind;
-  const ALL_SLANG = Object.values(slang).flat();
-  const slots = [];
-  for (let i = Math.max(min, 1); i < l.words.length; i++){
-    if (ALL_SLANG.includes(l.words[i]) || ALL_SLANG.includes(l.words[i-1])) continue;  // 신조어 연타 방지
-    const k = kindOf(l.words[i], l.words[i-1]);
-    if (k) slots.push([i,k]);
+  const cand = [];
+  for (const o of l.slots){
+    // 이미 끼운 신조어 바로 뒤에는 또 안 넣는다(신조어 연타 방지)
+    const i = l.words.findIndex((w, k) => k >= Math.max(min, 1) && w === o.before && !l.inserted.has(k - 1));
+    if (i >= 0) cand.push([i, o]);
   }
-  if (!slots.length) return false;
-  const [i,k] = pick(slots);
-  l.words.splice(i, 0, pick(slang[k]));
-  shiftMarks(l, i); l.dirty.add(i);
+  if (!cand.length) return false;
+  const [i, o] = pick(cand);
+  l.words.splice(i, 0, o.word);
+  shiftMarks(l, i); l.dirty.add(i); l.inserted.add(i);
+  l.slots = l.slots.filter(x => x.before !== o.before);   // 같은 자리엔 한 번만
   return true;
 }
 function atkReorder(l, min){
@@ -429,11 +384,13 @@ function atkReorder(l, min){
   const i = pick(cand);
   [l.words[i], l.words[i+1]] = [l.words[i+1], l.words[i]];
   l.dirty.add(i); l.dirty.add(i+1); l.swapped.add(i); l.swapped.add(i+1);
-  // 애너그램 표시는 어절을 따라간다
-  const a = l.shuffled.has(i), b = l.shuffled.has(i+1);
-  l.shuffled.delete(i); l.shuffled.delete(i+1);
-  if (a) l.shuffled.add(i+1);
-  if (b) l.shuffled.add(i);
+  // 애너그램·신조어 표시는 어절을 따라간다. 안 옮기면 신조어 연타 방지 판정이 엉뚱한 어절을 본다.
+  for (const set of [l.shuffled, l.inserted]){
+    const a = set.has(i), b = set.has(i+1);
+    set.delete(i); set.delete(i+1);
+    if (a) set.add(i+1);
+    if (b) set.add(i);
+  }
   return true;
 }
 const ATTACKS = {anagram:atkAnagram, insert:atkInsert, reorder:atkReorder};
@@ -468,7 +425,7 @@ class Player{
     while (this.queue.length < this.idx + 4){
       let t, guard = 0;
       do { t = pick(sentences()); guard++; }
-      while (guard < 8 && this.queue.slice(-3).some(l => l.src === t));
+      while (guard < 8 && this.queue.slice(-3).some(l => l.src === t.text));
       this.queue.push(makeLine(t));
     }
   }
@@ -659,8 +616,8 @@ function menu(mode){
   const nick = lsGet("tr_nick");
   CFG.lang = lsGet("tr_lang") === "en" ? "en" : "ko";   // 남의 방에서 바뀐 언어는 판이 끝나면 내 설정으로 돌린다
   const EX = CFG.lang === "en"
-    ? {anagram:"wonder → rednow", insert:"the based quiet river", reorder:"quiet river → river quiet"}
-    : {anagram:"언제인가를 → 언인가제를", insert:"뒷모습은 미친 아름답다", reorder:"가장 밝은 → 밝은 가장"};
+    ? {anagram:"wonder → rednow", insert:"a cup of bussin coffee", reorder:"quiet river → river quiet"}
+    : {anagram:"언제인가를 → 언인가제를", insert:"마시는 존맛 물 한 잔", reorder:"가장 밝은 → 밝은 가장"};
   app.innerHTML = `
   <div class="menu">
     <div class="kicker">TYPING BATTLE ROYALE</div>
