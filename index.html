@@ -105,6 +105,23 @@ body.risk{background:#fff1f2}   /* 지금 꼴찌 = 다음 탈락 대상 */
   content:"";position:absolute;left:10px;right:10px;top:calc(8px + var(--row));height:var(--row);
   background:var(--soft);border-radius:14px;z-index:0
 }
+/* 피격 연출: 화면 전체가 흔들리고 보드 테두리가 핑크로 번쩍인다 */
+.board::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:4;
+  box-shadow:inset 0 0 0 0 transparent;transition:box-shadow .5s
+}
+.board.flash::after{box-shadow:inset 0 0 0 3px var(--pink),inset 0 0 70px rgba(236,72,153,.28);transition:none}
+#app.jolt{animation:jolt .38s cubic-bezier(.36,.07,.19,.97)}
+#app.jolt-big{animation:jolt-big .52s cubic-bezier(.36,.07,.19,.97)}
+@keyframes jolt{
+  10%,90%{transform:translate(-2px,1px)} 20%,80%{transform:translate(4px,-2px)}
+  30%,50%,70%{transform:translate(-7px,2px)} 40%,60%{transform:translate(7px,-2px)}
+}
+@keyframes jolt-big{
+  10%,90%{transform:translate(-4px,2px) rotate(-.3deg)} 20%,80%{transform:translate(8px,-3px) rotate(.4deg)}
+  30%,50%,70%{transform:translate(-13px,4px) rotate(-.6deg)} 40%,60%{transform:translate(13px,-4px) rotate(.6deg)}
+}
+@media (prefers-reduced-motion: reduce){ #app.jolt,#app.jolt-big{animation:none} }
 .rail{position:relative;height:calc(var(--row)*3);overflow:hidden;z-index:1}
 .track{transform:translateY(calc(var(--row) * -1))}
 .track.go{transition:transform .42s cubic-bezier(.22,1,.36,1)}
@@ -558,6 +575,11 @@ class Player{
     feed(`${from.name} → ${this.name} · ${ATTACK_NAMES[applied]}`, this === G.me ? "dmg" : "");
     if (this === G.me){
       SFX.hit();
+      // 치는 중인 문장이 맞으면 더 세게 흔든다
+      const big = where === cur;
+      bump("#app", big ? "jolt-big" : "jolt");
+      bump("#board", "flash");
+      navigator.vibrate?.(big ? 90 : 40);
       toast(ATTACK_NAMES[applied] + (where === cur ? " · 치는 중인 문장!" : ""), "atk");
       if (where === cur) G.rebuild = true;
     } else {
@@ -612,10 +634,10 @@ function feed(msg, cls=""){
   box.prepend(d);
   while (box.children.length > 7) box.lastChild.remove();
 }
-function bump(sel){
+function bump(sel, cls = "hit"){
   const el = $(sel); if (!el) return;
-  el.classList.remove("hit"); void el.offsetWidth; el.classList.add("hit");
-  setTimeout(()=>el.classList.remove("hit"), 520);
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  setTimeout(()=>el.classList.remove(cls), 520);
 }
 
 /* ===================== 효과음 =====================
