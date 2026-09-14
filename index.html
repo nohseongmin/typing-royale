@@ -17,12 +17,13 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{
-  background:var(--bg); color:var(--ink);
+  background:var(--bg); color:var(--ink); transition:background .35s;
   font-family:"Pretendard Variable",Pretendard,system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   font-size:14.5px; display:flex; align-items:center; justify-content:center; padding:24px;
   -webkit-font-smoothing:antialiased;
 }
 #app{width:100%;max-width:1080px}
+body.risk{background:#fff1f2}   /* 지금 꼴찌 = 다음 탈락 대상 */
 .num{font-variant-numeric:tabular-nums}
 
 /* ================= menu ================= */
@@ -331,18 +332,33 @@ const lsGet = (k, d="") => { try { return localStorage.getItem(k) ?? d; } catch 
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const HANGUL = /[\u3131-\u318E\uAC00-\uD7A3]/, LATIN = /[A-Za-z]/;
 
-const DOUBLE_JUNG = [9,10,11,14,15,16,19];
-const DOUBLE_JONG = [3,5,6,9,10,11,12,13,14,15,18];
-/* 두벌식 실제 키 입력 수 */
-function strokes(str){
-  let n = 0;
+/* 두벌식 자판에서 누르는 키 순서로 푼다. 겹모음(ㅘ)·겹받침(ㄺ)은 두 키다.
+   타수 계산과, 조합 중인 글자가 목표의 올바른 앞부분인지(갇 → 가다) 판정에 같이 쓴다. */
+const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+const JUNG = ["ㅏ","ㅐ","ㅑ","ㅒ","ㅓ","ㅔ","ㅕ","ㅖ","ㅗ","ㅗㅏ","ㅗㅐ","ㅗㅣ","ㅛ","ㅜ","ㅜㅓ","ㅜㅔ","ㅜㅣ","ㅠ","ㅡ","ㅡㅣ","ㅣ"];
+const JONG = ["","ㄱ","ㄲ","ㄱㅅ","ㄴ","ㄴㅈ","ㄴㅎ","ㄷ","ㄹ","ㄹㄱ","ㄹㅁ","ㄹㅂ","ㄹㅅ","ㄹㅌ","ㄹㅍ","ㄹㅎ","ㅁ","ㅂ","ㅂㅅ","ㅅ","ㅆ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+const COMPAT_SPLIT = {"ㅘ":"ㅗㅏ","ㅙ":"ㅗㅐ","ㅚ":"ㅗㅣ","ㅝ":"ㅜㅓ","ㅞ":"ㅜㅔ","ㅟ":"ㅜㅣ","ㅢ":"ㅡㅣ",
+  "ㄳ":"ㄱㅅ","ㄵ":"ㄴㅈ","ㄶ":"ㄴㅎ","ㄺ":"ㄹㄱ","ㄻ":"ㄹㅁ","ㄼ":"ㄹㅂ","ㄽ":"ㄹㅅ","ㄾ":"ㄹㅌ","ㄿ":"ㄹㅍ","ㅀ":"ㄹㅎ","ㅄ":"ㅂㅅ"};
+function keys(str){
+  let out = "";
   for (const ch of str){
     const c = ch.charCodeAt(0) - 0xAC00;
-    if (c < 0 || c > 11171){ n += 1; continue; }
-    const jong = c % 28, jung = ((c - jong) / 28) % 21;
-    n += 1 + (DOUBLE_JUNG.includes(jung) ? 2 : 1) + (jong ? (DOUBLE_JONG.includes(jong) ? 2 : 1) : 0);
+    if (c < 0 || c > 11171){ out += COMPAT_SPLIT[ch] || ch; continue; }
+    out += CHO[Math.floor(c / 588)] + JUNG[Math.floor(c / 28) % 21] + JONG[c % 28];
   }
-  return n;
+  return out;
+}
+const strokes = str => keys(str).length;
+
+/* 처음 틀린 글자 위치(없으면 -1). 조합 중인 마지막 글자는 자모 단위로 앞부분만 맞으면 통과다. */
+function firstWrong(typed, target, composing){
+  for (let i = 0; i < typed.length; i++){
+    const ok = composing && i === typed.length - 1
+      ? keys(target.slice(i)).startsWith(keys(typed[i]))
+      : typed[i] === target[i];
+    if (!ok) return i;
+  }
+  return -1;
 }
 
 /* 한글 한 글자는 두벌식으로 평균 2.4타, 영문은 1타. 봇 속도와 2연타 판정을 언어와 무관하게 타수로 맞춘다. */
@@ -356,7 +372,8 @@ const MAX_HITS = 2;      // 한 문장이 받을 수 있는 최대 공격 수
 const SAFE_WORDS = 2;    // 지금 치는 어절에서 이만큼 뒤부터만 공격 가능
 
 function makeLine(src){
-  return {src, words:src.split(" "), tags:[], hits:0, dirty:new Set(), v:0};
+  // swapped/shuffled: 이미 순서섞기·애너그램 당한 어절. 같은 공격이 두 번 들어가면 원래대로 돌아올 수 있다.
+  return {src, words:src.split(" "), tags:[], hits:0, dirty:new Set(), swapped:new Set(), shuffled:new Set(), v:0};
 }
 const lineText = l => l.words.join(" ");
 
@@ -370,18 +387,20 @@ function wordAt(line, pos){
   }
   return line.words.length - 1;
 }
-function shiftDirty(line, from){
-  line.dirty = new Set([...line.dirty].map(d => d >= from ? d + 1 : d));
+/* 어절을 끼워 넣으면 그 뒤 표시들의 위치도 한 칸씩 민다 */
+function shiftMarks(line, from){
+  const shift = set => new Set([...set].map(d => d >= from ? d + 1 : d));
+  line.dirty = shift(line.dirty); line.swapped = shift(line.swapped); line.shuffled = shift(line.shuffled);
 }
 
 function atkAnagram(l, min){
-  const cand = l.words.map((w,i)=>i).filter(i => i >= min && l.words[i].length >= 3);
+  const cand = l.words.map((w,i)=>i).filter(i => i >= min && l.words[i].length >= 3 && !l.shuffled.has(i));
   if (!cand.length) return false;
   const i = pick(cand), src = l.words[i];
   for (let t=0; t<24; t++){
     const a = [...src];
     for (let k=a.length-1; k>0; k--){ const j = rnd(k+1); [a[k],a[j]] = [a[j],a[k]]; }
-    if (a.join("") !== src){ l.words[i] = a.join(""); l.dirty.add(i); return true; }
+    if (a.join("") !== src){ l.words[i] = a.join(""); l.dirty.add(i); l.shuffled.add(i); return true; }
   }
   return false;
 }
@@ -398,16 +417,23 @@ function atkInsert(l, min){
   if (!slots.length) return false;
   const [i,k] = pick(slots);
   l.words.splice(i, 0, pick(slang[k]));
-  shiftDirty(l, i); l.dirty.add(i);
+  shiftMarks(l, i); l.dirty.add(i);
   return true;
 }
 function atkReorder(l, min){
   const cand = [];
-  for (let i = Math.max(min,0); i < l.words.length - 1; i++) cand.push(i);
+  for (let i = Math.max(min,0); i < l.words.length - 1; i++){
+    if (!l.swapped.has(i) && !l.swapped.has(i+1)) cand.push(i);   // 한 번 바뀐 어절은 다시 안 바꾼다
+  }
   if (!cand.length) return false;
   const i = pick(cand);
   [l.words[i], l.words[i+1]] = [l.words[i+1], l.words[i]];
-  l.dirty.add(i); l.dirty.add(i+1);
+  l.dirty.add(i); l.dirty.add(i+1); l.swapped.add(i); l.swapped.add(i+1);
+  // 애너그램 표시는 어절을 따라간다
+  const a = l.shuffled.has(i), b = l.shuffled.has(i+1);
+  l.shuffled.delete(i); l.shuffled.delete(i+1);
+  if (a) l.shuffled.add(i+1);
+  if (b) l.shuffled.add(i);
   return true;
 }
 const ATTACKS = {anagram:atkAnagram, insert:atkInsert, reorder:atkReorder};
@@ -433,7 +459,7 @@ class Player{
   constructor(id, name, bot){
     this.id = id; this.name = name; this.bot = bot;
     this.queue = []; this.idx = 0;
-    this.typed = ""; this.done = 0; this.alive = true; this.rank = 0;
+    this.typed = ""; this.locked = 0; this.done = 0; this.alive = true; this.rank = 0;
     this.strokes = 0; this.keys = 0;
     this.startedAt = 0; this.cps = 0; this.pauseUntil = 0; this.lastChar = 0;
     this.fill();
@@ -486,7 +512,7 @@ class Player{
     const txt = this.text;
     const secs = (performance.now() - this.startedAt) / 1000;
     this.done++; this.strokes += strokes(txt);
-    this.idx++; this.typed = ""; this.startedAt = performance.now();
+    this.idx++; this.typed = ""; this.locked = 0; this.startedAt = performance.now();
     this.fill();
     if (G.online){
       // 공격 종류와 발수는 서버가 정한다
@@ -797,7 +823,7 @@ function start(opts){
   const net = opts.net || null;
   const base = DIFF[CFG.diff].cps;
   G = {players:[], me:null, target:null, running:true, nextElim:0, t0:0,
-       tick:null, composing:false, slide:false, sliding:false, rebuild:false, ver:-1, spans:[], hadErr:false,
+       tick:null, composing:false, committing:false, slide:false, sliding:false, rebuild:false, ver:-1, spans:[], hadErr:false,
        net, online:!!net, code:opts.code || null, sentProg:0};
   G.me = new Player(opts.you || "me", "나", false);
   G.players.push(G.me);
@@ -886,7 +912,14 @@ function renderGame(){
   inp.addEventListener("compositionend", ()=>{ G.composing = false; onInput(); });
   inp.addEventListener("input", onInput);
   inp.addEventListener("keydown", e=>{
-    if (e.key.length === 1 || e.key === "Process" || e.key === "Backspace"){ G.me.keys++; SFX.key(); }
+    const me = G.me;
+    // 틀린 글자를 고치기 전엔 다음 글자로 못 간다. 한글 IME 입력은 keydown으로 못 막아서 onInput에서 잘라낸다.
+    if (!e.isComposing && e.key.length === 1 && firstWrong(me.typed, me.text, false) >= 0){
+      e.preventDefault(); me.keys++; SFX.err(); return;
+    }
+    // 맞게 친 부분은 지울 수 없다
+    if (!e.isComposing && e.key === "Backspace" && inp.value.length <= me.locked){ e.preventDefault(); return; }
+    if (e.key.length === 1 || e.key === "Process" || e.key === "Backspace"){ me.keys++; SFX.key(); }
   });
   inp.addEventListener("blur", ()=> $("#blur").classList.add("on"));
   inp.addEventListener("focus", ()=> $("#blur").classList.remove("on"));
@@ -898,13 +931,42 @@ function renderGame(){
   addEventListener("resize", fitAll);
 }
 
+/* 조합 중에 입력칸 값을 바꾸면 IME가 조합을 끝내면서 글자를 다시 끼워 넣는다.
+   문장 끝 글자가 다음 문장으로 넘어가던 원인이 이거다. blur로 조합을 먼저 끝내고 다음 틱에 처리한다. */
+function endComposition(){
+  if (G.committing) return;
+  G.committing = true;
+  setTimeout(()=>{
+    const inp = $("#type");
+    G.committing = false;
+    if (!inp || !G.running) return;
+    inp.blur(); inp.focus();
+    G.composing = false;
+    onInput();
+  }, 0);
+}
+
 function onInput(){
   if (!G || !G.running || !G.me.alive) return;
-  const inp = $("#type");
-  G.me.typed = inp.value;
-  if (G.me.typed === G.me.text){
-    G.me.complete();
-    inp.value = ""; G.me.typed = "";
+  const inp = $("#type"), me = G.me, t = me.text;
+  let v = inp.value;
+  let w = firstWrong(v, t, G.composing);
+
+  if (G.composing){
+    // 틀린 글자 뒤로 새 글자를 조합하기 시작했거나, 마지막 글자까지 맞게 조합했으면 조합을 끊고 다시 판정한다
+    if ((w >= 0 && w < v.length - 1) || v === t) endComposition();
+  } else {
+    if (v.length < me.locked) v = t.slice(0, me.locked);          // 맞게 친 부분은 지울 수 없다
+    else if (w >= 0 && v.length > w + 1) v = v.slice(0, w + 1);   // 틀린 글자에서 멈춘다
+    if (v !== inp.value) inp.value = v;
+    w = firstWrong(v, t, false);
+    if (w < 0) me.locked = v.length;
+  }
+
+  me.typed = w >= 0 ? v.slice(0, w + 1) : v;
+  if (!G.composing && v === t){
+    me.complete();
+    inp.value = ""; me.typed = "";
   }
 }
 
@@ -918,6 +980,10 @@ function rowHtml(line, cls){
   });
   return `<div class="row ${cls}"><span class="fit">${h}</span></div>`;
 }
+/* 현재 문장과 다음 문장 둘 다 본다. 현재만 보면 다음 문장이 공격받아도 미리보기가 안 바뀌어서
+   넘어가는 순간 바뀐 글자가 튀어나온다. */
+const rowKey = () => { const q = G.me.queue, i = G.me.idx; return `${i}:${q[i].v}:${q[i+1].v}`; };
+
 function buildRows(){
   const me = G.me, q = me.queue;
   $("#track").innerHTML =
@@ -929,7 +995,7 @@ function buildRows(){
   G.tail = document.createElement("span");          // 문장 길이를 넘겨 친 글자
   G.tail.className = "ch no tail";
   fit.appendChild(G.tail);
-  G.ver = me.idx * 1000 + me.line.v;
+  G.ver = rowKey();
   fitAll();
 }
 function fitAll(){
@@ -1005,6 +1071,7 @@ function over(win){
   G.running = false;
   clearInterval(G.tick);
   if (G.net) G.net.close();
+  document.body.classList.remove("risk");
   const me = G.me; me.rank = me.rank || 1;
   const mins = (performance.now() - G.t0) / 60000;
   app.innerHTML = `
@@ -1028,7 +1095,7 @@ function draw(){
   const now = performance.now(), me = G.me;
 
   if (G.slide){ G.slide = false; G.rebuild = false; advance(); }
-  else if (!G.sliding && (G.rebuild || G.ver !== me.idx*1000 + me.line.v)){ G.rebuild = false; buildRows(); }
+  else if (!G.sliding && (G.rebuild || G.ver !== rowKey())){ G.rebuild = false; buildRows(); }
 
   const left = Math.max(0, G.nextElim - now);
   $("#tleft").textContent = `다음 탈락 ${(left/1000).toFixed(1)}초`;
@@ -1037,14 +1104,15 @@ function draw(){
 
   // 글자 상태
   const t = me.text, typed = me.typed;
-  let bad = false;
+  const wrongAt = firstWrong(typed, t, G.composing);
+  let bad = wrongAt >= 0;
   for (let i=0;i<G.spans.length;i++){
     const s = G.spans[i];
     let st = "";
     if (i < typed.length){
-      if (G.composing && i === typed.length-1) st = "comp";
-      else if (typed[i] === t[i]) st = "ok";
-      else { st = "no"; bad = true; }
+      if (i === wrongAt) st = "no";
+      else if (G.composing && i === typed.length-1) st = "comp";
+      else st = "ok";
     } else if (i === typed.length) st = "cur";
     if (s.dataset.st !== st){
       s.dataset.st = st;
@@ -1081,6 +1149,7 @@ function draw(){
 
   const ranked = G.players.filter(p=>p.alive).sort((a,b)=>b.score-a.score);
   $("#sRank").textContent = ranked.indexOf(me) + 1;
+  document.body.classList.toggle("risk", me.alive && ranked.length > 1 && ranked.indexOf(me) === ranked.length - 1);
 
   const foes = G.players.filter(p => p !== me), box = $("#foes");
   if (box.children.length !== foes.length){
