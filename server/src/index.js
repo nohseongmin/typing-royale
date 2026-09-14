@@ -29,8 +29,10 @@ const json = (obj, status = 200) =>
 const randomCode = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(4)), b => CODE_CHARS[b % CODE_CHARS.length]).join("");
 
-/* 방 코드는 대소문자를 가리지 않고, 링크로 돌려도 깨지지 않게 정규화한다 */
-const normCode = raw => (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+/* 방 코드는 대소문자를 가리지 않고, 링크로 돌려도 깨지지 않게 정규화한다.
+   자동 매칭 코드(AUTOEN12345)까지 담아야 해서 16자. 8자로 자르면 버킷 10개가 한 방으로 뭉쳐서
+   /join이 빈 방이라고 확인한 방과 실제로 들어가는 방이 달라진다. */
+const normCode = raw => (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
 
 export default {
   async fetch(request, env) {
@@ -39,14 +41,16 @@ export default {
 
     // 자동 매칭: 같은 시간 버킷의 방을 묻고, 이미 시작했으면 다음 버킷으로 넘어간다
     if (url.pathname === "/join") {
+      // 한타·영타는 서로 다른 대기열로 묶는다
+      const lang = url.searchParams.get("lang") === "en" ? "EN" : "";
       const bucket = Math.floor(Date.now() / AUTO_BUCKET_MS);
       for (let i = 0; i < 3; i++) {
-        const code = "AUTO" + ((bucket + i) % 100000);
+        const code = normCode("AUTO" + lang + ((bucket + i) % 100000));
         const room = env.ROOM.get(env.ROOM.idFromName(code));
         const open = await room.fetch("https://room/open").then(r => r.json());
         if (open.joinable) return json({code});
       }
-      return json({code: "AUTO" + (bucket + 3) % 100000});
+      return json({code: normCode("AUTO" + lang + ((bucket + 3) % 100000))});
     }
 
     if (url.pathname === "/new") return json({code: randomCode()});
@@ -71,6 +75,7 @@ export class Room {
     this.startTimer = null;
     this.loop = null;
     this.elimAt = 0;
+    this.lang = "ko";           // 첫 입장자의 언어로 정해진다
     // ponytail: 방 상태를 메모리에만 둔다. 게임이 2분 안에 끝나고 WebSocket이 붙어 있는
     // 동안 DO가 살아 있어서 지금은 충분하다. 재접속을 지원하려면 storage로 옮겨야 한다.
   }
@@ -92,22 +97,24 @@ export class Room {
 
     this.code = normCode(url.searchParams.get("room"));
     const name = (url.searchParams.get("name") || "익명").slice(0, 12);
+    const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
     const pair = new WebSocketPair();
-    this.accept(pair[1], name);
+    this.accept(pair[1], name, lang);
     return new Response(null, {status: 101, webSocket: pair[0]});
   }
 
-  accept(ws, name) {
+  accept(ws, name, lang) {
     ws.accept();
 
     if (this.phase !== "lobby") { this.kick(ws, "이미 시작한 방이다"); return; }
     if (this.players.size >= MAX_PLAYERS) { this.kick(ws, "방이 찼다"); return; }
 
+    if (this.players.size === 0) this.lang = lang;
     const id = crypto.randomUUID().slice(0, 8);
     const player = {id, name, ws, done: 0, prog: 0, alive: true, rank: 0, aim: null};
     this.players.set(id, player);
 
-    this.send(ws, {t: "joined", you: id, code: this.code, max: MAX_PLAYERS});
+    this.send(ws, {t: "joined", you: id, code: this.code, max: MAX_PLAYERS, lang: this.lang});
     this.broadcastPlayers();
 
     ws.addEventListener("message", e => {

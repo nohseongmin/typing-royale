@@ -71,7 +71,9 @@ body{
 .field input::placeholder{color:var(--dim)}
 .field .btn{padding:12px 24px;font-size:14px;white-space:nowrap}
 .err{color:var(--red);font-size:12.5px;text-align:center;min-height:18px;margin-top:8px}
-.modes{display:flex;gap:6px;justify-content:center;margin-bottom:26px}
+.modebar{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:26px}
+.snd{background:var(--soft);color:var(--mute);border:0;border-radius:999px;padding:9px 14px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.snd:hover{background:var(--soft2);color:var(--ink)}
 .cards{
   margin-top:36px;display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;text-align:left
 }
@@ -118,6 +120,11 @@ body{
 .ch.ok{color:var(--ink);opacity:1}
 .ch.comp{color:var(--acc);opacity:1}
 .ch.no{color:var(--red);opacity:1;background:#fee2e2;border-radius:3px}
+/* 틀린 자리 위에 원래 글자를 흐릿하게 남긴다 */
+.ch[data-t]:not([data-t=""])::before{
+  content:attr(data-t);position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+  font-size:.52em;line-height:1;color:var(--mute);opacity:.85;font-weight:600;pointer-events:none;margin-bottom:2px
+}
 .ch.cur::after{
   content:"";position:absolute;left:6%;right:6%;bottom:0;height:3px;
   background:var(--acc);border-radius:2px;animation:cb 1s steps(2) infinite
@@ -222,7 +229,7 @@ const SENTENCES = [
    adn = 관형어(체언 앞)  /  adv = 부사(용언·부사 앞) */
 const SLANG = {
   adn: ["미친","도른","야르한","찐","킹받는","개쩌는","샤갈"],
-  adv: ["준내","개","핵","겁나","오지게","킹받게","레알"]
+  adv: ["준내","개","핵","겁나","오지게","킹받게"]
 };
 
 /* 삽입 자리 판정. 확실할 때만 자리로 인정하고 애매하면 버린다(자리 수보다 문법이 우선).
@@ -261,6 +268,58 @@ function slotKind(next, prev){
   return null;
 }
 
+/* ===================== 영타 ===================== */
+const SENTENCES_EN = [
+  "The quiet river runs through the old town",
+  "Every small step brings you closer to the top",
+  "She opened the window and watched the rain fall",
+  "Good habits slowly change the shape of your life",
+  "The stars wait for us in the same place every night",
+  "A warm cup of coffee can save a long day",
+  "He wrote a short letter to his best friend",
+  "The morning light spilled across the kitchen floor",
+  "Our team finished the project just before midnight",
+  "The cat slept on the warm edge of the bed",
+  "Fast hands matter less than careful hands",
+  "They walked along the beach until the sun went down",
+  "This old road leads to a small village by the sea",
+  "The wind carried the smell of fresh bread",
+  "Reading a good book feels like a quiet journey",
+  "The children laughed as the snow covered the yard",
+  "My brother fixed the broken bike in one afternoon",
+  "The city looks different when the lights come on",
+  "Every mistake teaches you something new",
+  "The train left the station right on time",
+  "Her voice filled the empty hall with music",
+  "The leaves turned red and gold in early autumn",
+  "We planted a tree in the corner of the garden",
+  "The old clock on the wall stopped at noon",
+  "Keep going even when the road feels long",
+  "The baker opens his shop before the sun rises",
+  "A single idea can change the whole world",
+  "The dog waited by the door for its owner",
+  "Clear goals make hard work feel lighter",
+  "The mountain looked calm under the gray sky"
+];
+
+/* 영어 끼워넣기도 문법 자리만 쓴다.
+   adj = 한정사(the, my…) 바로 뒤 -> 형용사 / adv = 동사 사전에 있는 단어 바로 앞 -> 부사
+   a/an 뒤는 끼운 단어 발음에 따라 관사가 바뀌어야 해서(a based / an sus) 뺐다. */
+const SLANG_EN = {
+  adj: ["sus","based","cursed","goated","mid"],
+  adv: ["lowkey","highkey","literally","kinda"]
+};
+const DETERMINER_EN = /^(the|my|your|his|her|our|their|its|this|every)$/i;
+const VERBS_EN = new Set(("runs brings opened watched fall change wait save wrote spilled finished slept matter " +
+  "walked went leads carried feels feel laughed covered fixed looks come teaches left filled turned planted " +
+  "stopped opens rises waited make looked").split(" "));
+
+function slotKindEn(next, prev){
+  if (prev && DETERMINER_EN.test(prev)) return "adj";
+  if (VERBS_EN.has(next.toLowerCase())) return "adv";
+  return null;
+}
+
 /* ===================== 유틸 ===================== */
 const $ = s => document.querySelector(s);
 const app = $("#app");
@@ -270,6 +329,7 @@ const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
 /* 시크릿 모드·샌드박스 iframe·data: URL에서는 localStorage 접근 자체가 throw한다 */
 const lsGet = (k, d="") => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const HANGUL = /[\u3131-\u318E\uAC00-\uD7A3]/, LATIN = /[A-Za-z]/;
 
 const DOUBLE_JUNG = [9,10,11,14,15,16,19];
 const DOUBLE_JONG = [3,5,6,9,10,11,12,13,14,15,18];
@@ -284,6 +344,12 @@ function strokes(str){
   }
   return n;
 }
+
+/* 한글 한 글자는 두벌식으로 평균 2.4타, 영문은 1타. 봇 속도와 2연타 판정을 언어와 무관하게 타수로 맞춘다. */
+const KO_STROKES_PER_CHAR = 2.4;
+const FAST_STROKES_PER_SEC = 6.2;   // 이보다 빠르게 문장을 끝내면 공격 2발
+const strokesPerChar = () => CFG.lang === "en" ? 1 : KO_STROKES_PER_CHAR;
+const sentences = () => CFG.lang === "en" ? SENTENCES_EN : SENTENCES;
 
 /* ===================== 문장 & 공격 ===================== */
 const MAX_HITS = 2;      // 한 문장이 받을 수 있는 최대 공격 수
@@ -320,16 +386,18 @@ function atkAnagram(l, min){
   return false;
 }
 function atkInsert(l, min){
-  const ALL_SLANG = [...SLANG.adn, ...SLANG.adv];
+  const en = CFG.lang === "en";
+  const slang = en ? SLANG_EN : SLANG, kindOf = en ? slotKindEn : slotKind;
+  const ALL_SLANG = Object.values(slang).flat();
   const slots = [];
   for (let i = Math.max(min, 1); i < l.words.length; i++){
     if (ALL_SLANG.includes(l.words[i]) || ALL_SLANG.includes(l.words[i-1])) continue;  // 신조어 연타 방지
-    const k = slotKind(l.words[i], l.words[i-1]);
+    const k = kindOf(l.words[i], l.words[i-1]);
     if (k) slots.push([i,k]);
   }
   if (!slots.length) return false;
   const [i,k] = pick(slots);
-  l.words.splice(i, 0, pick(SLANG[k]));
+  l.words.splice(i, 0, pick(slang[k]));
   shiftDirty(l, i); l.dirty.add(i);
   return true;
 }
@@ -373,7 +441,7 @@ class Player{
   fill(){
     while (this.queue.length < this.idx + 4){
       let t, guard = 0;
-      do { t = pick(SENTENCES); guard++; }
+      do { t = pick(sentences()); guard++; }
       while (guard < 8 && this.queue.slice(-3).some(l => l.src === t));
       this.queue.push(makeLine(t));
     }
@@ -406,6 +474,7 @@ class Player{
 
     feed(`${from.name} → ${this.name} · ${ATTACK_NAMES[applied]}`, this === G.me ? "dmg" : "");
     if (this === G.me){
+      SFX.hit();
       toast(ATTACK_NAMES[applied] + (where === cur ? " · 치는 중인 문장!" : ""), "atk");
       if (where === cur) G.rebuild = true;
     } else {
@@ -425,9 +494,10 @@ class Player{
       G.slide = true;
       return;
     }
-    const n = (txt.length / Math.max(secs, .1)) > 2.6 ? 2 : 1;
+    const n = txt.length * strokesPerChar() / Math.max(secs, .1) > FAST_STROKES_PER_SEC ? 2 : 1;
     for (let i=0;i<n;i++) sendAttack(this);
     if (this === G.me){
+      SFX.atk();
       feed(`문장 완료 · 공격 ${n}발`, "me");
       if (n === 2) toast("PERFECT · 2연타", "good");
       G.slide = true;
@@ -465,6 +535,58 @@ function bump(sel){
   setTimeout(()=>el.classList.remove("hit"), 520);
 }
 
+/* ===================== 효과음 =====================
+   소리 파일 없이 Web Audio로 합성한다. 브라우저는 사용자 입력 전에는 소리를 막아서
+   첫 키 입력이나 클릭 때 컨텍스트를 연다. */
+const SFX = {
+  ctx: null, noise: null,
+  muted: lsGet("tr_mute") === "1",
+  toggle(){ this.muted = !this.muted; lsSet("tr_mute", this.muted ? "1" : "0"); },
+  open(){
+    if (this.muted) return null;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!this.ctx){
+      this.ctx = new AC();
+      this.noise = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+      const d = this.noise.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    return this.ctx;
+  },
+  env(g, t, peak, dur){
+    g.gain.setValueAtTime(peak, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  },
+  tone(type, f0, f1, dur, peak){
+    const c = this.open(); if (!c) return;
+    const t = c.currentTime, o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    this.env(g, t, peak, dur);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t + dur + .02);
+  },
+  hiss(type, f0, f1, dur, peak, q = 1){
+    const c = this.open(); if (!c) return;
+    const t = c.currentTime, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = this.noise;
+    f.type = type; f.Q.value = q;
+    f.frequency.setValueAtTime(f0, t);
+    f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    this.env(g, t, peak, dur);
+    src.connect(f).connect(g).connect(c.destination);
+    src.start(t, Math.random() * .5); src.stop(t + dur + .02);
+  },
+  key(){ const f = 2600 + Math.random()*900; this.hiss("bandpass", f, f*.8, .035, .16, 3); this.tone("sine", 190, 120, .03, .08); },  // 짧은 고음 잡음 + 낮은 톡
+  err(){ this.tone("square", 150, 95, .09, .05); },                                                                            // 낮게 떨어지는 버즈
+  atk(){ this.hiss("bandpass", 500, 3200, .2, .22, 1.5); this.tone("triangle", 320, 880, .16, .07); },                        // 위로 올라가는 휙
+  hit(){ this.tone("sine", 180, 42, .32, .45); this.hiss("lowpass", 1400, 200, .16, .3); }                                     // 묵직한 쿵
+};
+const sndLabel = () => SFX.muted ? "소리 끔" : "소리 켬";
+
 /* ===================== 네트워크 =====================
    Cloudflare Worker + Durable Object. 방 하나가 DO 인스턴스 하나다.
    ?server=... 로 덮어쓸 수 있어서 로컬 개발 서버나 자체 호스팅도 붙는다. */
@@ -476,7 +598,7 @@ const wsBase   = () => SERVER.replace(/^http/, "ws").replace(/\/+$/, "");
 class Net{
   constructor(code, name, handlers){
     this.h = handlers;
-    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}`);
+    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&lang=${CFG.lang}`);
     this.ws.onopen = () => this.h.open && this.h.open();
     this.ws.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -497,7 +619,7 @@ class Remote{
 }
 
 /* ===================== 메뉴 ===================== */
-const CFG = {diff:"normal", bots:2};
+const CFG = {diff:"normal", bots:2, lang: lsGet("tr_lang") === "en" ? "en" : "ko"};
 const DIFF = {easy:{cps:1.3,label:"쉬움"}, normal:{cps:2.1,label:"보통"}, hard:{cps:3.3,label:"어려움"}};
 
 function menu(mode){
@@ -509,14 +631,25 @@ function menu(mode){
   lsSet("tr_mode", mode);
   if (!SERVER && mode === "online") mode = "offline";
   const nick = lsGet("tr_nick");
+  CFG.lang = lsGet("tr_lang") === "en" ? "en" : "ko";   // 남의 방에서 바뀐 언어는 판이 끝나면 내 설정으로 돌린다
+  const EX = CFG.lang === "en"
+    ? {anagram:"wonder → rednow", insert:"the based quiet river", reorder:"quiet river → river quiet"}
+    : {anagram:"언제인가를 → 언인가제를", insert:"뒷모습은 미친 아름답다", reorder:"가장 밝은 → 밝은 가장"};
   app.innerHTML = `
   <div class="menu">
     <div class="kicker">TYPING BATTLE ROYALE</div>
     <div class="logo">타자 <em>배틀로얄</em></div>
     <div class="sub">문장을 완성하면 상대 문장이 망가진다 · 20초마다 꼴찌 탈락</div>
-    <div class="modes seg" id="segMode">
-      <button data-k="online" class="${mode!=="solo"?"on":""}">온라인 대전</button>
-      <button data-k="solo" class="${mode==="solo"?"on":""}">연습 모드</button>
+    <div class="modebar">
+      <div class="seg" id="segMode">
+        <button data-k="online" class="${mode!=="solo"?"on":""}">온라인 대전</button>
+        <button data-k="solo" class="${mode==="solo"?"on":""}">연습 모드</button>
+      </div>
+      <div class="seg" id="segLang">
+        <button data-k="ko" class="${CFG.lang==="ko"?"on":""}">한타</button>
+        <button data-k="en" class="${CFG.lang==="en"?"on":""}">영타</button>
+      </div>
+      <button class="snd" id="snd">${sndLabel()}</button>
     </div>
     ${mode === "offline" ? `
       <div class="lobby">
@@ -545,9 +678,9 @@ function menu(mode){
       </div>
     `}
     <div class="cards">
-      <div class="card"><b>애너그램</b><p>단어 글자를 섞는다.</p><div class="ex">언제인가를 → 언인가제를</div></div>
-      <div class="card"><b>끼워넣기</b><p>신조어를 문법 맞는 자리에 밀어 넣는다.</p><div class="ex">뒷모습은 미친 아름답다</div></div>
-      <div class="card"><b>순서섞기</b><p>어절 순서를 뒤바꾼다.</p><div class="ex">가장 밝은 → 밝은 가장</div></div>
+      <div class="card"><b>애너그램</b><p>단어 글자를 섞는다.</p><div class="ex">${EX.anagram}</div></div>
+      <div class="card"><b>끼워넣기</b><p>신조어를 문법 맞는 자리에 밀어 넣는다.</p><div class="ex">${EX.insert}</div></div>
+      <div class="card"><b>순서섞기</b><p>어절 순서를 뒤바꾼다.</p><div class="ex">${EX.reorder}</div></div>
       <div class="card"><b>불가침</b><p>친 부분과 바로 다음 한 어절은 안전. 그 뒤부터 실시간으로 망가진다.</p></div>
     </div>
   </div>`;
@@ -561,6 +694,8 @@ function menu(mode){
     });
   };
   seg("#segMode", null, null, k => menu(k));
+  seg("#segLang", null, null, k => { lsSet("tr_lang", k); menu(mode === "solo" ? "solo" : "online"); });
+  $("#snd").addEventListener("click", e => { SFX.toggle(); e.currentTarget.textContent = sndLabel(); });
   seg("#segDiff","diff",String);
   seg("#segBots","bots",Number);
 
@@ -584,7 +719,7 @@ function menu(mode){
   };
 
   $("#quick").addEventListener("click", guard(async ()=>{
-    lobby((await ask("/join")).code, nickOf(), true);
+    lobby((await ask("/join?lang=" + CFG.lang)).code, nickOf(), true);
   }));
   $("#make").addEventListener("click", guard(async ()=>{
     lobby((await ask("/new")).code, nickOf(), false);
@@ -607,7 +742,7 @@ function lobby(code, name, auto){
     const left = deadline ? Math.max(0, Math.ceil((deadline - Date.now())/1000)) : null;
     app.innerHTML = `
     <div class="menu">
-      <div class="kicker">${auto ? "빠른 시작" : "방"}</div>
+      <div class="kicker">${auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"}</div>
       <div class="lobby" style="margin-top:22px">
         <div class="code" id="copy" title="눌러서 복사">${esc(code)}</div>
         <div class="codehint" id="hint">코드를 눌러 복사해서 같이 할 사람에게 보내라</div>
@@ -634,7 +769,12 @@ function lobby(code, name, auto){
   const stop = () => { clearInterval(tick); net.close(); };
 
   const net = new Net(code, name, {
-    joined: m => { lobby.you = m.you; render(); },
+    joined: m => {
+      lobby.you = m.you;
+      // 방 언어는 먼저 들어온 사람 기준이다. 한타·영타가 한 방에 섞이면 공정하지 않다.
+      if (m.lang && m.lang !== CFG.lang){ CFG.lang = m.lang; toast(m.lang === "en" ? "영타 방에 들어왔다" : "한타 방에 들어왔다"); }
+      render();
+    },
     players: m => { players = m.players; render(); },
     countdown: m => { deadline = Date.now() + m.sec*1000; render(); },
     denied: m => { clearInterval(tick); menu("online"); setTimeout(()=>{ const e=$("#err"); if(e) e.textContent = m.reason; }, 30); },
@@ -664,7 +804,7 @@ function start(opts){
   if (!G.online){
     for (let i=0;i<CFG.bots;i++){
       const b = new Player("b"+i, "봇 "+BOT_NAMES[i], true);
-      b.cps = base * (0.85 + Math.random()*0.3);
+      b.cps = base * KO_STROKES_PER_CHAR / strokesPerChar() * (0.85 + Math.random()*0.3);
       G.players.push(b);
     }
   }
@@ -693,7 +833,7 @@ function wireGame(net){
       if (m.elimIn) G.nextElim = performance.now() + m.elimIn;
     },
     atk: m => G.me.hit(m.kind, {name: m.from}),
-    sent: m => feed(`나 → ${m.to} · ${ATTACK_NAMES[m.kind]}`, "me"),
+    sent: m => { SFX.atk(); feed(`나 → ${m.to} · ${ATTACK_NAMES[m.kind]}`, "me"); },
     out: m => {
       feed(`${m.name} 탈락 · ${m.rank}위`, "out");
       if (m.id !== G.me.id) toast(m.name + " 탈락");
@@ -714,6 +854,7 @@ function renderGame(){
     <span class="stat"><b class="num" id="sAcc">100</b><u>%</u></span>
     <span class="stat"><b class="num" id="sDone">0</b><u>문장</u></span>
     <span class="stat"><b class="num" id="sRank">1</b><u>위</u></span>
+    <button class="snd" id="snd">${sndLabel()}</button>
   </div>
   <div class="stage">
     <div>
@@ -745,11 +886,12 @@ function renderGame(){
   inp.addEventListener("compositionend", ()=>{ G.composing = false; onInput(); });
   inp.addEventListener("input", onInput);
   inp.addEventListener("keydown", e=>{
-    if (e.key.length === 1 || e.key === "Process" || e.key === "Backspace") G.me.keys++;
+    if (e.key.length === 1 || e.key === "Process" || e.key === "Backspace"){ G.me.keys++; SFX.key(); }
   });
   inp.addEventListener("blur", ()=> $("#blur").classList.add("on"));
   inp.addEventListener("focus", ()=> $("#blur").classList.remove("on"));
   $("#blur").addEventListener("click", ()=> inp.focus());
+  $("#snd").addEventListener("click", e => { SFX.toggle(); e.currentTarget.textContent = sndLabel(); });
   document.addEventListener("click", ()=>{ if (G && G.running) inp.focus(); });
   inp.focus();
   buildRows();
@@ -911,18 +1053,25 @@ function draw(){
     // '가' 자리에 '그'를 치면 '그'가 보여야 한다
     const want = i < typed.length ? typed[i] : t[i];
     if (s.textContent !== want) s.textContent = want;
+    // 대신 원래 글자도 위에 흐릿하게 남겨서 뭘 쳤어야 했는지 보이게 한다
+    const ruby = st === "no" ? (t[i] === " " ? "␣" : t[i]) : "";
+    if ((s.dataset.t || "") !== ruby) s.dataset.t = ruby;
   }
   const extra = typed.length > t.length ? typed.slice(t.length) : "";
   if (G.tail.textContent !== extra) G.tail.textContent = extra;
   if (extra) bad = true;
   if (bad && !G.hadErr){
+    SFX.err();
     const row = $(".row.cur");
     if (row){ row.classList.remove("shake"); void row.offsetWidth; row.classList.add("shake"); }
   }
   G.hadErr = bad;
 
   const inc = me.incoming;
-  $("#hint").innerHTML = inc ? `대기 중인 공격 <b>${inc}</b>` : "";
+  // 한글 자리에 영문이, 영문 자리에 한글이 들어오면 한/영 전환을 안 한 것이다
+  const last = typed.slice(-1), expect = t[typed.length - 1] || "";
+  const wrongIme = last && ((HANGUL.test(last) && LATIN.test(expect)) || (LATIN.test(last) && HANGUL.test(expect)));
+  $("#hint").innerHTML = wrongIme ? "<b>한/영 키를 눌러라</b>" : inc ? `대기 중인 공격 <b>${inc}</b>` : "";
 
   const mins = (now - G.t0) / 60000;
   const good = [...typed].filter((c,i)=>c === t[i]).join("");
@@ -950,7 +1099,7 @@ function draw(){
     el.querySelector(".dn").textContent = p.done + "문장";
     el.querySelector(".rk").textContent = p.alive ? (ranked.indexOf(p)+1) + "위" : "OUT";
     el.querySelector(".load").textContent = p.alive && p.incoming ? "적재 " + p.incoming : "";
-    el.querySelector(".sp").textContent = p.alive && p.cps ? Math.round(p.cps*2.4*60) + "타/분" : "";
+    el.querySelector(".sp").textContent = p.alive && p.cps ? Math.round(p.cps*strokesPerChar()*60) + "타/분" : "";
   }
 
 }
