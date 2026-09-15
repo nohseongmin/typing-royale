@@ -277,6 +277,12 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 /* 로비 준비 */
 .slot .grow{flex:1}
 .slot .ready{font-size:13px;font-weight:800;color:var(--ok-ink);background:var(--acc-soft);padding:3px 9px;border-radius:999px}
+/* 계정 */
+.account{margin-top:8px;font-size:15px;color:var(--mute);min-height:34px;display:flex;gap:10px;justify-content:center;align-items:center}
+.account b{color:var(--ink)}
+.account .coin{color:#d97706;font-weight:800}
+.kakao{background:#FEE500;color:rgba(0,0,0,.85);border:0;border-radius:12px;padding:10px 20px;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
+.linkbtn{background:none;border:0;color:var(--mute);font:inherit;font-size:15px;text-decoration:underline;cursor:pointer;padding:0}
 @media(max-width:1066px){.stage{grid-template-columns:1fr}:root{--row:99px}.fit{font-size:30px}}
 </style>
 </head>
@@ -885,7 +891,8 @@ const wsBase   = () => SERVER.replace(/^http/, "ws").replace(/\/+$/, "");
 class Net{
   constructor(code, name, handlers){
     this.h = handlers;
-    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&lang=${CFG.lang}`);
+    const token = AUTH.token ? "&token=" + encodeURIComponent(AUTH.token) : "";   // 웹소켓은 헤더를 못 붙여서 쿼리로 보낸다
+    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&lang=${CFG.lang}${token}`);
     this.ws.onopen = () => this.h.open && this.h.open();
     this.ws.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -903,6 +910,54 @@ class Remote{
   constructor(o){ Object.assign(this, o); this.cps = 0; this.incoming = 0; }
   get progress(){ return this.prog || 0; }
   get score(){ return this.done * 1000 + this.progress * 999; }
+}
+
+/* ===================== 계정 =====================
+   카카오 로그인은 서버가 처리하고, 끝나면 게임 주소 # 뒤에 세션 토큰을 붙여서 돌려보낸다.
+   로그인 안 해도 지금처럼 다 할 수 있다. 계정은 재화·스킨·랭크를 저장하는 데 쓴다. */
+const AUTH = {token: lsGet("tr_session"), user: null, kakao: false};
+
+function authFetch(path, opts = {}){
+  const headers = {...(opts.headers || {})};
+  if (AUTH.token) headers.Authorization = "Bearer " + AUTH.token;
+  return fetch(httpBase() + path, {...opts, headers});
+}
+/* 로그인하고 돌아왔으면 # 뒤 토큰을 챙기고 주소창에서 지운다 */
+function takeLoginResult(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.has("session") && !h.has("login_error")) return;
+  if (h.get("session")){ AUTH.token = h.get("session"); lsSet("tr_session", AUTH.token); }
+  if (h.get("login_error")) setTimeout(()=> toast("로그인하지 못했다"), 300);
+  history.replaceState(null, "", location.pathname + location.search);
+}
+async function loadAccount(){
+  if (!SERVER) return;
+  try {
+    AUTH.kakao = (await (await fetch(httpBase() + "/auth/config")).json()).kakao === true;
+    if (!AUTH.token) return;
+    const r = await authFetch("/me");
+    if (r.status === 401){ AUTH.token = ""; lsSet("tr_session", ""); return; }   // 만료되거나 로그아웃된 세션
+    if (r.ok) AUTH.user = (await r.json()).user;
+  } catch (e) {
+    console.warn("계정 정보를 못 불러왔다", e);
+  }
+}
+async function saveNickname(nick){
+  if (!AUTH.user || !nick || nick === AUTH.user.nickname) return;
+  const r = await authFetch("/me", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({nickname: nick})});
+  if (r.ok) AUTH.user = (await r.json()).user;
+  else console.warn("닉네임 저장 실패", r.status);
+}
+async function logout(){
+  await authFetch("/logout", {method: "POST"}).catch(e => console.warn("로그아웃 요청 실패", e));
+  AUTH.token = ""; AUTH.user = null; lsSet("tr_session", "");
+}
+const accountHtml = () => AUTH.user
+  ? `<b>${esc(AUTH.user.nickname)}</b><span><span class="coin num">${AUTH.user.coins}</span> 코인</span><button class="linkbtn" id="logout">로그아웃</button>`
+  : AUTH.kakao ? `<button class="kakao" id="login">카카오로 로그인</button>` : "";
+function wireAccount(){
+  $("#login")?.addEventListener("click", ()=>{ location.href = httpBase() + "/auth/kakao/start"; });
+  $("#logout")?.addEventListener("click", async ()=>{ await logout(); menu(); });
 }
 
 /* ===================== 메뉴 ===================== */
@@ -928,6 +983,7 @@ function menu(mode){
     <div class="logo">타자 <em>배틀로얄</em></div>
     <div class="sub">문장을 완성하면 상대 문장이 망가진다 · 20초마다 꼴찌 탈락</div>
     <div class="online" id="online"></div>
+    <div class="account" id="account">${accountHtml()}</div>
     <div class="modebar">
       <div class="seg" id="segMode">
         <button data-k="online" class="${mode!=="solo"?"on":""}">온라인 대전</button>
@@ -956,7 +1012,7 @@ function menu(mode){
       <button class="btn" id="go">연습 시작</button>
     ` : `
       <div class="lobby">
-        <div class="field"><input id="nick" maxlength="12" placeholder="닉네임" value="${esc(nick)}"></div>
+        <div class="field"><input id="nick" maxlength="12" placeholder="닉네임" value="${esc(AUTH.user?.nickname || nick)}"></div>
         <div class="field"><button class="btn" id="quick" style="flex:1">빠른 시작</button></div>
         <div class="field">
           <input id="code" maxlength="8" placeholder="방 코드" style="text-transform:uppercase">
@@ -986,6 +1042,7 @@ function menu(mode){
   seg("#segLang", null, null, k => { lsSet("tr_lang", k); menu(mode === "solo" ? "solo" : "online"); });
   $("#snd").addEventListener("click", e => { SFX.toggle(); e.currentTarget.textContent = sndLabel(); });
   $("#theme").addEventListener("click", toggleTheme);
+  wireAccount();
   seg("#segDiff","diff",String);
   seg("#segBots","bots",Number);
 
@@ -1004,7 +1061,7 @@ function menu(mode){
 
   const fail = msg => $("#err").textContent = msg;
   const nickOf = () => ($("#nick").value.trim() || "익명").slice(0,12);
-  const remember = () => lsSet("tr_nick", $("#nick").value.trim());
+  const remember = () => { const v = $("#nick").value.trim(); lsSet("tr_nick", v); saveNickname(v); };   // 로그인했으면 계정에도 저장
 
   async function ask(path){
     if (!SERVER) throw new Error("서버 주소가 설정되지 않았다. 주소창에 ?server=... 를 붙여라");
@@ -1058,7 +1115,7 @@ function invite(code){
     <div class="lobby" style="margin-top:29px">
       <div class="code">${esc(code)}</div>
       <div class="codehint">같이 칠 때 보일 닉네임을 정해라</div>
-      <div class="field"><input id="nick" maxlength="12" placeholder="닉네임" value="${esc(lsGet("tr_nick"))}"></div>
+      <div class="field"><input id="nick" maxlength="12" placeholder="닉네임" value="${esc(AUTH.user?.nickname || lsGet("tr_nick"))}"></div>
       <div class="field"><button class="btn" id="join" style="flex:1">입장</button></div>
       <div class="field"><button class="btn ghost" id="toMenu" style="flex:1">메뉴로</button></div>
     </div>
@@ -1068,6 +1125,7 @@ function invite(code){
   const join = () => {
     const nick = $("#nick").value.trim();
     lsSet("tr_nick", nick);
+    saveNickname(nick);
     clearLink();
     lobby(code, (nick || "익명").slice(0, 12), code.startsWith("AUTO"));
   };
@@ -1621,8 +1679,16 @@ function draw(){
 
 // 초대 링크(?room=코드)로 들어오면 닉네임부터 정하고 그 방으로 간다
 const invitedRoom = (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+takeLoginResult();
 if (invitedRoom && SERVER) invite(invitedRoom);
 else menu();
+// 계정은 화면을 먼저 띄운 뒤 불러와서 채운다. 기다렸다 그리면 느린 망에서 빈 화면이 오래 보인다.
+loadAccount().then(()=>{
+  const box = $("#account");
+  if (box){ box.innerHTML = accountHtml(); wireAccount(); }
+  const nickInput = $("#nick");
+  if (nickInput && AUTH.user && !nickInput.value) nickInput.value = AUTH.user.nickname;
+});
 </script>
 </body>
 </html>

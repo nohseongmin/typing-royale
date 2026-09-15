@@ -17,3 +17,13 @@ class_name = "Matchmaker"
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Matchmaker"]   # 빠른 시작 매치메이커(전역 하나)
+
+# 계정 DB (카카오 로그인·재화·랭크)
+[[d1_databases]]
+binding = "DB"
+database_name = "typing-royale"
+database_id = "e788aaa3-4ef8-4e70-ae1f-b1c011db5011"
+migrations_dir = "migrations"
+
+[vars]
+APP_ORIGIN = "https://nohseongmin.github.io/typing-royale/"   # 로그인 끝나고 돌아갈 게임 주소

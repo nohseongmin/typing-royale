@@ -9,7 +9,10 @@
  * 각자 치고 있는 문장과 커서 위치도 받아서 다른 사람 화면(상대 카드·관전)에 뿌린다.
  *
  * 빠른 시작은 Matchmaker(전역 DO 하나)가 대기 중인 방 중 사람이 가장 많은 곳으로 보낸다.
+ * 계정·카카오 로그인은 auth.js(D1)가 맡는다.
  */
+
+import {handleAuth, userFromToken} from "./auth.js";
 
 const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
@@ -28,8 +31,8 @@ const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // 헷갈리는 I,O,0,1 
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization"
 };
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {status, headers: {...CORS, "Content-Type": "application/json"}});
@@ -47,6 +50,9 @@ export default {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, {headers: CORS});
 
+    const authResponse = await handleAuth(request, env, url, json);
+    if (authResponse) return authResponse;
+
     if (url.pathname === "/join") {
       const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
       const r = await matchmaker(env).fetch("https://mm/join?lang=" + lang);
@@ -63,8 +69,14 @@ export default {
     if (url.pathname === "/ws") {
       const code = normCode(url.searchParams.get("room"));
       if (!code) return json({error: "room code required"}, 400);
+      // 로그인한 사람이면 계정 id와 닉네임을 방에 넘긴다. 클라이언트가 보낸 uid는 믿지 않고 지운다.
+      // (웹소켓은 헤더를 못 붙여서 토큰이 쿼리로 온다. 방에는 넘기지 않는다.)
+      const params = new URLSearchParams(url.searchParams);
+      const user = await userFromToken(env, params.get("token"));
+      params.delete("token"); params.delete("uid");
+      if (user) { params.set("uid", String(user.id)); params.set("name", user.nickname); }
       const room = env.ROOM.get(env.ROOM.idFromName(code));
-      return room.fetch(new Request("https://room/ws?" + url.searchParams, request));
+      return room.fetch(new Request("https://room/ws?" + params, request));
     }
 
     return json({ok: true, service: "typing-royale"});
@@ -146,12 +158,13 @@ export class Room {
     this.auto = isAutoCode(this.code);
     const name = (url.searchParams.get("name") || "익명").slice(0, 12);
     const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
+    const uid = Number(url.searchParams.get("uid")) || null;   // 로그인 안 했으면 null
     const pair = new WebSocketPair();
-    this.accept(pair[1], name, lang);
+    this.accept(pair[1], name, lang, uid);
     return new Response(null, {status: 101, webSocket: pair[0]});
   }
 
-  accept(ws, name, lang) {
+  accept(ws, name, lang, uid) {
     ws.accept();
 
     if (this.phase !== "lobby") { this.kick(ws, "이미 시작한 방이다"); return; }
@@ -162,7 +175,7 @@ export class Room {
       this.heart = setInterval(() => this.report(), HEARTBEAT_MS);
     }
     const id = crypto.randomUUID().slice(0, 8);
-    const player = {id, name, ws, done: 0, prog: 0, alive: true, rank: 0, aim: null,
+    const player = {id, uid, name, ws, done: 0, prog: 0, alive: true, rank: 0, aim: null,
                     ready: false, line: "", pos: 0, bad: false, dt: []};
     this.players.set(id, player);
     if (!this.host) this.host = id;
