@@ -9,3 +9,11 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]   # 무료 플랜의 Durable Object는 SQLite 백엔드만 된다
+
+[[durable_objects.bindings]]
+name = "MATCH"
+class_name = "Matchmaker"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Matchmaker"]   # 빠른 시작 매치메이커(전역 하나)

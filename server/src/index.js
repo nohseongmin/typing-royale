@@ -6,15 +6,19 @@
  *
  * 서버는 심판만 본다. 문장 생성과 오염은 각 클라이언트가 자기 화면에서 처리하고,
  * 서버는 진행도를 모아 순위를 매기고 탈락을 선고하며 공격을 중계한다.
+ *
+ * 빠른 시작은 Matchmaker(전역 DO 하나)가 대기 중인 방 중 사람이 가장 많은 곳으로 보낸다.
  */
 
-const MAX_PLAYERS = 8;
+const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
-const LOBBY_WAIT_MS = 20000;   // 두 번째 사람이 들어온 뒤 이만큼 더 기다렸다가 시작
-const SOLO_WAIT_MS = 20000;    // 혼자면 이만큼 기다렸다가 봇전으로 돌려보낸다
-const ELIM_MS = 20000;         // 탈락 주기
-const STATE_HZ = 5;            // 진행도 브로드캐스트 빈도
-const AUTO_BUCKET_MS = 45000;  // 자동 매칭은 같은 시간대에 누른 사람끼리 묶는다
+const LOBBY_WAIT_MS = 20000;    // 빠른 시작: 두 번째 사람이 들어온 뒤 이만큼 더 기다렸다가 시작
+const SOLO_WAIT_MS = 20000;     // 빠른 시작: 혼자면 이만큼 기다렸다가 봇전으로 돌려보낸다
+const ELIM_MS = 20000;          // 탈락 주기
+const STATE_HZ = 5;             // 진행도 브로드캐스트 빈도
+const HEARTBEAT_MS = 30000;     // 방이 살아 있다고 매치메이커에 알리는 주기
+const ROOM_STALE_MS = 75000;    // 이만큼 소식 없는 방은 매치메이커 목록에서 지운다
+const MAX_FIRE_BONUS = 2;       // 불붙음으로 늘어나는 공격 수 상한
 const KINDS = ["anagram", "insert", "reorder"];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // 헷갈리는 I,O,0,1 제외
 
@@ -29,28 +33,25 @@ const json = (obj, status = 200) =>
 const randomCode = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(4)), b => CODE_CHARS[b % CODE_CHARS.length]).join("");
 
-/* 방 코드는 대소문자를 가리지 않고, 링크로 돌려도 깨지지 않게 정규화한다.
-   자동 매칭 코드(AUTOEN12345)까지 담아야 해서 16자. 8자로 자르면 버킷 10개가 한 방으로 뭉쳐서
-   /join이 빈 방이라고 확인한 방과 실제로 들어가는 방이 달라진다. */
+/* 방 코드는 대소문자를 가리지 않고, 링크로 돌려도 깨지지 않게 정규화한다 */
 const normCode = raw => (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+const isAutoCode = code => code.startsWith("AUTO");
+const matchmaker = env => env.MATCH.get(env.MATCH.idFromName("global"));
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") return new Response(null, {headers: CORS});
 
-    // 자동 매칭: 같은 시간 버킷의 방을 묻고, 이미 시작했으면 다음 버킷으로 넘어간다
     if (url.pathname === "/join") {
-      // 한타·영타는 서로 다른 대기열로 묶는다
-      const lang = url.searchParams.get("lang") === "en" ? "EN" : "";
-      const bucket = Math.floor(Date.now() / AUTO_BUCKET_MS);
-      for (let i = 0; i < 3; i++) {
-        const code = normCode("AUTO" + lang + ((bucket + i) % 100000));
-        const room = env.ROOM.get(env.ROOM.idFromName(code));
-        const open = await room.fetch("https://room/open").then(r => r.json());
-        if (open.joinable) return json({code});
-      }
-      return json({code: normCode("AUTO" + lang + ((bucket + 3) % 100000))});
+      const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
+      const r = await matchmaker(env).fetch("https://mm/join?lang=" + lang);
+      return json(await r.json());
+    }
+
+    if (url.pathname === "/stats") {
+      const r = await matchmaker(env).fetch("https://mm/stats");
+      return json(await r.json());
     }
 
     if (url.pathname === "/new") return json({code: randomCode()});
@@ -66,14 +67,64 @@ export default {
   }
 };
 
+/* 모든 방의 인원·상태를 모아 두고, 빠른 시작을 누른 사람을 가장 붐비는 대기방으로 보낸다.
+   예전에는 45초 단위 시간대로 방을 나눠서, 거의 동시에 눌러도 경계에 걸리면 서로 다른 방에 떨어졌다. */
+export class Matchmaker {
+  constructor() {
+    this.rooms = new Map();   // code -> {auto, lang, phase, players, at}
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url), now = Date.now();
+    for (const [code, r] of this.rooms) if (now - r.at > ROOM_STALE_MS) this.rooms.delete(code);
+
+    if (url.pathname === "/report") {
+      const r = await request.json();
+      if (!r.players) this.rooms.delete(r.code);
+      else this.rooms.set(r.code, {auto: r.auto, lang: r.lang, phase: r.phase, players: r.players, at: now});
+      return new Response("ok");
+    }
+
+    if (url.pathname === "/join") {
+      const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
+      let best = null;
+      for (const [code, r] of this.rooms) {
+        if (!r.auto || r.lang !== lang || r.phase !== "lobby" || r.players >= MAX_PLAYERS) continue;
+        if (!best || r.players > this.rooms.get(best).players) best = code;
+      }
+      if (best) {
+        this.rooms.get(best).players++;   // 곧 들어올 사람 자리를 미리 잡아 둔다. 방이 보고하면 실제 값으로 덮인다.
+        return Response.json({code: best});
+      }
+      const code = "AUTO" + (lang === "en" ? "EN" : "") + randomCode();
+      this.rooms.set(code, {auto: true, lang, phase: "lobby", players: 1, at: now});
+      return Response.json({code});
+    }
+
+    if (url.pathname === "/stats") {
+      let waiting = 0, playing = 0;
+      for (const r of this.rooms.values()) {
+        if (r.phase === "lobby") waiting += r.players; else playing += r.players;
+      }
+      return Response.json({online: waiting + playing, waiting, playing});
+    }
+
+    return new Response("not found", {status: 404});
+  }
+}
+
 export class Room {
-  constructor(state) {
+  constructor(state, env) {
     this.state = state;
+    this.env = env;
     this.players = new Map();   // id -> player
     this.phase = "lobby";
     this.code = null;
+    this.auto = false;          // 빠른 시작 방이면 카운트다운으로 시작, 직접 판 방이면 방장이 시작
+    this.host = null;
     this.startTimer = null;
     this.loop = null;
+    this.heart = null;
     this.elimAt = 0;
     this.lang = "ko";           // 첫 입장자의 언어로 정해진다
     // ponytail: 방 상태를 메모리에만 둔다. 게임이 2분 안에 끝나고 WebSocket이 붙어 있는
@@ -82,20 +133,13 @@ export class Room {
 
   async fetch(request) {
     const url = new URL(request.url);
-
-    if (url.pathname === "/open") {
-      return Response.json({
-        joinable: this.phase === "lobby" && this.players.size < MAX_PLAYERS,
-        players: this.players.size
-      });
-    }
-
     if (url.pathname !== "/ws") return new Response("not found", {status: 404});
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("expected websocket", {status: 426});
     }
 
     this.code = normCode(url.searchParams.get("room"));
+    this.auto = isAutoCode(this.code);
     const name = (url.searchParams.get("name") || "익명").slice(0, 12);
     const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
     const pair = new WebSocketPair();
@@ -109,13 +153,18 @@ export class Room {
     if (this.phase !== "lobby") { this.kick(ws, "이미 시작한 방이다"); return; }
     if (this.players.size >= MAX_PLAYERS) { this.kick(ws, "방이 찼다"); return; }
 
-    if (this.players.size === 0) this.lang = lang;
+    if (this.players.size === 0) {
+      this.lang = lang;
+      this.heart = setInterval(() => this.report(), HEARTBEAT_MS);
+    }
     const id = crypto.randomUUID().slice(0, 8);
     const player = {id, name, ws, done: 0, prog: 0, alive: true, rank: 0, aim: null};
     this.players.set(id, player);
+    if (!this.host) this.host = id;
 
-    this.send(ws, {t: "joined", you: id, code: this.code, max: MAX_PLAYERS, lang: this.lang});
+    this.send(ws, {t: "joined", you: id, code: this.code, max: MAX_PLAYERS, lang: this.lang, auto: this.auto, host: this.host});
     this.broadcastPlayers();
+    this.report();
 
     ws.addEventListener("message", e => {
       let msg;
@@ -126,7 +175,7 @@ export class Room {
     ws.addEventListener("close", drop);
     ws.addEventListener("error", drop);
 
-    this.scheduleStart();
+    if (this.auto) this.scheduleStart();
   }
 
   kick(ws, reason) {
@@ -136,15 +185,32 @@ export class Room {
 
   remove(id) {
     if (!this.players.delete(id)) return;
+    // 방장이 나가면 남은 사람 중 먼저 들어온 사람이 방장이 된다
+    if (this.host === id) this.host = this.players.keys().next().value || null;
     // 마지막 사람이 나가면 방을 비운다. 안 그러면 끝난 방 코드가 계속 입장 거부한다.
-    if (this.players.size === 0) { this.reset(); return; }
-    if (this.phase === "lobby") { this.broadcastPlayers(); this.scheduleStart(); return; }
+    if (this.players.size === 0) { this.reset(); this.report(); return; }
+    this.report();
+    if (this.phase === "lobby") {
+      this.broadcastPlayers();
+      if (this.auto) this.scheduleStart();
+      return;
+    }
     // 게임 중 나가면 그 자리에서 탈락 처리한다
     this.broadcastPlayers();
     this.checkWinner();
   }
 
+  /* 매치메이커에 인원·상태를 알린다. 실패해도 게임에는 영향 없다. */
+  report() {
+    if (!this.code) return;
+    matchmaker(this.env).fetch("https://mm/report", {
+      method: "POST",
+      body: JSON.stringify({code: this.code, auto: this.auto, lang: this.lang, phase: this.phase, players: this.players.size})
+    }).catch(() => {});
+  }
+
   /* ---------- 로비 ---------- */
+  /* 빠른 시작 방 전용. 직접 판 방은 방장이 시작 버튼을 누를 때까지 그대로 기다린다. */
   scheduleStart() {
     clearTimeout(this.startTimer);
     const n = this.players.size;
@@ -168,6 +234,11 @@ export class Room {
   reset() {
     clearTimeout(this.startTimer);
     clearInterval(this.loop);
+    if (this.players.size === 0) {
+      clearInterval(this.heart);
+      this.heart = null;
+      this.host = null;
+    }
     this.startTimer = this.loop = null;
     this.phase = "lobby";
     for (const p of this.players.values()) { p.done = 0; p.prog = 0; p.alive = true; p.rank = 0; }
@@ -179,6 +250,7 @@ export class Room {
     this.phase = "playing";
     this.elimAt = Date.now() + ELIM_MS;
     this.broadcast({t: "start", elimIn: ELIM_MS});
+    this.report();
 
     this.loop = setInterval(() => {
       if (Date.now() >= this.elimAt) {
@@ -200,10 +272,16 @@ export class Room {
       p.aim = msg.id && this.players.has(msg.id) ? msg.id : null;
       return;
     }
+    if (msg.t === "start") {
+      if (!this.auto && p.id === this.host && this.phase === "lobby" && this.players.size >= MIN_PLAYERS) this.start();
+      return;
+    }
     if (msg.t === "done" && this.phase === "playing" && p.alive) {
       // 공격 종류와 발수는 서버가 정한다. 클라이언트가 고르게 두면 제일 아픈 것만 고른다.
+      // 불붙음 보너스는 클라이언트 신고라 상한을 둔다.
       const fast = +msg.ms > 0 && +msg.ms < 12000;
-      for (let i = 0; i < (fast ? 2 : 1); i++) this.fire(p);
+      const shots = (fast ? 2 : 1) + Math.max(0, Math.min(MAX_FIRE_BONUS, msg.fire | 0));
+      for (let i = 0; i < shots; i++) this.fire(p);
     }
   }
 
@@ -218,7 +296,7 @@ export class Room {
     }
     const kind = KINDS[Math.floor(Math.random() * KINDS.length)];
     this.send(target.ws, {t: "atk", from: from.name, kind});
-    this.send(from.ws, {t: "sent", to: target.name, kind});
+    this.send(from.ws, {t: "sent", to: target.name, toId: target.id, kind});
   }
 
   eliminate() {
@@ -243,6 +321,7 @@ export class Room {
     this.phase = "over";
     clearInterval(this.loop);
     this.loop = null;
+    this.report();
   }
 
   /* ---------- 전송 ---------- */
@@ -252,6 +331,6 @@ export class Room {
     const list = [...this.players.values()]
       .map(({id, name, done, prog, alive, rank}) => ({id, name, done, prog, alive, rank}));
     const elimIn = this.phase === "playing" ? Math.max(0, this.elimAt - Date.now()) : 0;
-    this.broadcast({t: "players", players: list, elimIn, phase: this.phase});
+    this.broadcast({t: "players", players: list, elimIn, phase: this.phase, host: this.host, auto: this.auto});
   }
 }
