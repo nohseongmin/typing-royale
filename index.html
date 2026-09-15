@@ -221,6 +221,7 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 /* ================= 추가 UI ================= */
 .online{margin-top:13px;font-size:16px;color:var(--mute);min-height:23px}
 .online b{color:var(--acc)}
+.invite input{font-size:16px;color:var(--mute)}
 .slot .host{font-size:13px;font-weight:800;color:var(--ink);background:var(--soft2);padding:2px 9px;border-radius:1299px}
 .aimpill{font-size:16px;color:var(--mute);white-space:nowrap}
 .aimpill b{color:var(--pink)}
@@ -1012,7 +1013,11 @@ function lobby(code, name, auto, retry = 0){
       <div class="kicker">${auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}</div>
       <div class="lobby" style="margin-top:29px">
         <div class="code" id="copy" title="눌러서 초대 링크 복사">${esc(code)}</div>
-        <div class="codehint">${Date.now() - copiedAt < 1500 ? "초대 링크를 복사했다" : "코드를 누르면 초대 링크가 복사된다"}</div>
+        <div class="field invite">
+          <input id="inviteUrl" readonly value="${esc(inviteLink(code))}">
+          <button class="btn" id="copyLink">${Date.now() - copiedAt < 1500 ? "복사됨" : "초대 링크 복사"}</button>
+        </div>
+        <div class="codehint">링크를 받은 사람은 누르기만 하면 바로 이 방에 들어온다</div>
         <div class="slots">
           ${players.map(p=>`<div class="slot">${esc(p.name)}${!auto && p.id===host?'<span class="host">방장</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}</div>`).join("")}
           ${Array.from({length: Math.max(0, 2 - players.length)}, ()=>`<div class="slot empty">비어 있음</div>`).join("")}
@@ -1023,12 +1028,23 @@ function lobby(code, name, auto, retry = 0){
         <div class="err" id="err"></div>
       </div>
     </div>`;
-    $("#copy").addEventListener("click", ()=>{
-      navigator.clipboard?.writeText(inviteLink(code));
-      copiedAt = Date.now(); render();
-    });
+    $("#copy").addEventListener("click", copyInvite);
+    $("#copyLink").addEventListener("click", copyInvite);
+    $("#inviteUrl").addEventListener("focus", e => e.target.select());
     $("#leave").addEventListener("click", ()=>{ stop(); menu("online"); });
     $("#begin")?.addEventListener("click", ()=> net.send({t:"start"}));
+  };
+
+  /* 폰이면 공유창을 띄우고, PC면 클립보드에 복사한다. 클립보드가 막힌 브라우저면 링크를 선택해 둬서 Ctrl+C만 누르면 된다. */
+  const copyInvite = async () => {
+    const url = inviteLink(code);
+    try {
+      if (navigator.share && matchMedia("(pointer: coarse)").matches) await navigator.share({title: "타자 배틀로얄", text: "타자 배틀로얄 한 판 하자", url});
+      else await navigator.clipboard.writeText(url);
+      copiedAt = Date.now(); render();
+    } catch (e) {
+      if (e.name !== "AbortError") $("#inviteUrl")?.select();
+    }
   };
 
   const stop = () => { clearInterval(tick); net.close(); };
@@ -1060,7 +1076,7 @@ function lobby(code, name, auto, retry = 0){
   });
 
   render();
-  tick = setInterval(()=>{ if (deadline || copiedAt) render(); }, 500);   // 카운트다운이나 복사 안내가 있을 때만 다시 그린다
+  tick = setInterval(()=>{ if (deadline || Date.now() - copiedAt < 2000) render(); }, 500);   // 카운트다운이나 복사 안내가 있을 때만 다시 그린다
 }
 
 /* ===================== 게임 ===================== */
