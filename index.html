@@ -14,7 +14,7 @@ catch (e) { document.documentElement.dataset.theme = "light"; }
 :root{
   --bg:#fff; --soft:#f6f7f9; --soft2:#eef0f4; --line:#e8eaee;
   --ink:#191b1e; --mute:#8b93a1; --dim:#c9ced7;
-  --acc:#10b981; --acc-soft:#e7f8f1;
+  --acc:#10b981; --acc-soft:color-mix(in srgb, var(--acc) 12%, var(--bg));
   --pink:#ec4899; --pink-soft:#fdeaf4;
   --red:#ef4444;
   --no-bg:#fee2e2; --risk-bg:#fff1f2; --out-bg:#fff0f0; --out-ink:#b91c1c;
@@ -27,7 +27,7 @@ catch (e) { document.documentElement.dataset.theme = "light"; }
   color-scheme:dark;
   --bg:#0f1115; --soft:#181b22; --soft2:#232833; --line:#2a2f3a;
   --ink:#e8eaee; --mute:#8b93a1; --dim:#4b5262;
-  --acc-soft:#0f2a22; --pink:#f472b6; --pink-soft:#2e1726; --red:#f87171;
+  --acc-soft:color-mix(in srgb, var(--acc) 16%, var(--bg)); --pink:#f472b6; --pink-soft:#2e1726; --red:#f87171;
   --no-bg:#3b1a1e; --risk-bg:#2a1418; --out-bg:#2b1719; --out-ink:#fca5a5;
   --ok-ink:#6ee7b7; --dmg-ink:#f9a8d4; --veil:rgba(15,17,21,.88);
   --toast-bg:#e8eaee; --toast-ink:#0f1115; --shadow:rgba(0,0,0,.5);
@@ -62,7 +62,7 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 .btn{
   background:var(--acc);color:#fff;border:0;border-radius:1299px;padding:20px 60px;
   font:inherit;font-size:21px;font-weight:700;cursor:pointer;transition:.15s;
-  box-shadow:0 8px 23px rgba(16,185,129,.28)
+  box-shadow:0 8px 23px color-mix(in srgb, var(--acc) 28%, transparent)
 }
 .btn:hover{transform:translateY(-1px)}
 .btn.ghost{background:var(--soft);color:var(--mute);box-shadow:none;font-size:20px;padding:18px 39px}
@@ -283,6 +283,23 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 .account .coin{color:#d97706;font-weight:800}
 .kakao{background:#FEE500;color:rgba(0,0,0,.85);border:0;border-radius:12px;padding:10px 20px;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
 .linkbtn{background:none;border:0;color:var(--mute);font:inherit;font-size:15px;text-decoration:underline;cursor:pointer;padding:0}
+/* 상점 */
+.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:13px;margin-top:23px;text-align:left}
+.item{background:var(--soft);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:10px;border:2px solid transparent}
+.item.on{border-color:var(--acc)}
+.item b{font-size:18px}
+.item u{text-decoration:none;color:var(--mute);font-size:14px}
+.item .pv{min-height:44px}
+.item div.pv{font-size:22px;display:flex;align-items:center}
+.item .btn{padding:12px 16px;font-size:16px}
+.swatch{gap:8px}
+.swatch i{width:34px;height:34px;border-radius:50%;background:var(--sw)}
+.swatch i:nth-child(2){opacity:.55}
+.swatch i:nth-child(3){opacity:.2}
+.coin{color:#d97706}
+.reward{margin-top:10px;font-size:22px;font-weight:800;color:#d97706;min-height:30px}
+/* 글꼴 스킨은 치는 문장에만 입힌다. 메뉴·숫자까지 바뀌면 읽기 힘들다. */
+.fit,.wline,.foe .mini{font-family:var(--type-font, inherit)}
 @media(max-width:1066px){.stage{grid-template-columns:1fr}:root{--row:99px}.fit{font-size:30px}}
 </style>
 </head>
@@ -870,7 +887,28 @@ const SFX = {
     src.connect(f).connect(g).connect(c.destination);
     src.start(t, Math.random() * .5); src.stop(t + dur + .02);
   },
-  key(){ const f = 2600 + Math.random()*900; this.hiss("bandpass", f, f*.8, .035, .16, 3); this.tone("sine", 190, 120, .03, .08); },  // 짧은 고음 잡음 + 낮은 톡
+  pack: "sound:basic",   // 상점 소리 스킨
+  key(){
+    const r = Math.random();
+    switch (this.pack){
+      case "sound:blue":         // 청축: 딸깍 두 번 겹치는 날카로운 클릭
+        this.hiss("highpass", 4200 + r*800, 3000, .018, .3, 1); this.tone("square", 1900, 1400, .012, .05);
+        setTimeout(()=> this.hiss("bandpass", 3000 + r*600, 2200, .02, .18, 4), 14);
+        break;
+      case "sound:red":          // 적축: 낮고 둥근 톡
+        this.hiss("lowpass", 1500 + r*300, 500, .05, .22, 1); this.tone("sine", 150, 90, .05, .12);
+        break;
+      case "sound:typewriter":   // 타자기: 쇠 부딪는 탁
+        this.hiss("bandpass", 2200 + r*500, 1200, .06, .3, 6); this.tone("triangle", 520, 260, .05, .1);
+        break;
+      case "sound:bubble":       // 뽁뽁이: 음이 떨어지는 뽁
+        this.tone("sine", 900 + r*300, 300, .07, .18);
+        break;
+      default: {                 // 짧은 고음 잡음 + 낮은 톡
+        const f = 2600 + r*900; this.hiss("bandpass", f, f*.8, .035, .16, 3); this.tone("sine", 190, 120, .03, .08);
+      }
+    }
+  },
   err(){ this.tone("square", 150, 95, .09, .05); },                                                                            // 낮게 떨어지는 버즈
   atk(){ this.hiss("bandpass", 500, 3200, .2, .22, 1.5); this.tone("triangle", 320, 880, .16, .07); },                        // 위로 올라가는 휙
   hit(){ this.tone("sine", 180, 42, .32, .45); this.hiss("lowpass", 1400, 200, .16, .3); },                                    // 묵직한 쿵
@@ -954,10 +992,38 @@ async function logout(){
 }
 const accountHtml = () => AUTH.user
   ? `<b>${esc(AUTH.user.nickname)}</b><span><span class="coin num">${AUTH.user.coins}</span> 코인</span><button class="linkbtn" id="logout">로그아웃</button>`
-  : AUTH.kakao ? `<button class="kakao" id="login">카카오로 로그인</button>` : "";
+  : "";   // 기본은 게스트. 로그인 버튼은 상점 안에 있다
 function wireAccount(){
   $("#login")?.addEventListener("click", ()=>{ location.href = httpBase() + "/auth/kakao/start"; });
   $("#logout")?.addEventListener("click", async ()=>{ await logout(); menu(); });
+}
+
+/* ===================== 스킨 =====================
+   이름·가격은 서버 상점 목록이 기준이고, 여기는 적용 방법만 둔다. */
+const SKIN_FONTS = {"font:jua": "Jua", "font:dohyeon": "Do Hyeon", "font:pen": "Nanum Pen Script", "font:coding": "Nanum Gothic Coding"};
+const SKIN_THEMES = {"theme:cobalt": "#3b82f6", "theme:violet": "#8b5cf6", "theme:sunset": "#f59e0b"};
+
+/* 글꼴은 쓸 때만 받는다. 전부 미리 받으면 첫 화면이 느려진다. */
+function loadFont(id){
+  const family = SKIN_FONTS[id];
+  if (!family) return null;
+  const href = "https://fonts.googleapis.com/css2?family=" + family.replace(/ /g, "+") + "&display=swap";
+  if (![...document.querySelectorAll("link[rel=stylesheet]")].some(l => l.href === href)){
+    const link = document.createElement("link");
+    link.rel = "stylesheet"; link.href = href;
+    document.head.appendChild(link);
+  }
+  return `"${family}", "Pretendard Variable", Pretendard, system-ui, sans-serif`;
+}
+function applyLoadout(loadout){
+  if (!loadout) return;
+  SFX.pack = loadout.sound || "sound:basic";
+  const root = document.documentElement.style;
+  const font = loadFont(loadout.font);
+  if (font) root.setProperty("--type-font", font); else root.removeProperty("--type-font");
+  if (SKIN_THEMES[loadout.theme]) root.setProperty("--acc", SKIN_THEMES[loadout.theme]); else root.removeProperty("--acc");
+  // 글꼴이 바뀌면 글자 폭이 달라져서 한 줄 맞춤을 다시 계산한다
+  document.fonts?.ready.then(()=>{ if (G?.running) fitAll(); });
 }
 
 /* ===================== 메뉴 ===================== */
@@ -985,6 +1051,7 @@ function menu(mode){
     <div class="online" id="online"></div>
     <div class="account" id="account">${accountHtml()}</div>
     <div class="modebar">
+      <button class="snd" id="shopBtn">상점</button>
       <div class="seg" id="segMode">
         <button data-k="online" class="${mode!=="solo"?"on":""}">온라인 대전</button>
         <button data-k="solo" class="${mode==="solo"?"on":""}">연습 모드</button>
@@ -1043,6 +1110,7 @@ function menu(mode){
   $("#snd").addEventListener("click", e => { SFX.toggle(); e.currentTarget.textContent = sndLabel(); });
   $("#theme").addEventListener("click", toggleTheme);
   wireAccount();
+  $("#shopBtn").addEventListener("click", ()=> shop());
   seg("#segDiff","diff",String);
   seg("#segBots","bots",Number);
 
@@ -1089,6 +1157,95 @@ function menu(mode){
   }));
   $("#code").addEventListener("keydown", e => { if (e.key === "Enter") $("#enter").click(); });
   $("#nick").addEventListener("keydown", e => { if (e.key === "Enter") $("#quick").click(); });
+}
+
+/* ===================== 상점 ===================== */
+const SHOP_TABS = {sound: "타자 소리", font: "글꼴", theme: "테마"};
+const LISTEN_TAPS = [0, 110, 200, 330, 420];   // 들어보기: 다다닥 치는 느낌으로 몇 번
+
+async function shop(tab = "sound"){
+  clearInterval(menu.poll);
+  app.innerHTML = `<div class="menu"><div class="kicker">SHOP</div><div class="logo">스킨 <em>상점</em></div><div class="wait" style="margin-top:31px">불러오는 중</div></div>`;
+  let data;
+  try {
+    const r = await authFetch("/shop");
+    if (!r.ok) throw new Error("status " + r.status);
+    data = await r.json();
+  } catch (e) {
+    console.error("상점을 못 불러왔다", e);
+    app.querySelector(".wait").innerHTML = `상점을 불러오지 못했다 · <button class="linkbtn" id="back">메뉴로</button>`;
+    $("#back").addEventListener("click", ()=> menu());
+    return;
+  }
+  const logged = !!AUTH.user;
+  const owned = new Set(data.owned || []), loadout = data.loadout || {};
+  if (logged) AUTH.user.coins = data.coins;
+
+  const preview = it => it.slot === "font"
+    ? `<div class="pv" style='font-family:${loadFont(it.id) || "inherit"}'>타자 배틀로얄 Typing</div>`
+    : it.slot === "theme"
+      ? `<div class="pv swatch" style="--sw:${SKIN_THEMES[it.id] || "#10b981"}"><i></i><i></i><i></i></div>`
+      : `<button class="snd pv" data-listen="${it.id}">들어보기</button>`;
+  const action = it => {
+    const price = it.price ? it.price + " 코인" : "무료";
+    if (!logged) return `<button class="btn ghost" disabled>${price}</button>`;
+    if (loadout[it.slot] === it.id) return `<button class="btn ghost" disabled>사용 중</button>`;
+    if (it.price === 0 || owned.has(it.id)) return `<button class="btn" data-equip="${it.id}">사용하기</button>`;
+    return `<button class="btn" data-buy="${it.id}" ${data.coins < it.price ? "disabled" : ""}>${it.price} 코인에 사기</button>`;
+  };
+
+  app.innerHTML = `
+  <div class="menu">
+    <div class="kicker">SHOP</div>
+    <div class="logo">스킨 <em>상점</em></div>
+    <div class="sub">${logged
+      ? `<b class="coin num">${data.coins}</b> 코인 · 온라인 대전에서 순위가 높을수록 많이 받는다`
+      : "스킨은 로그인하면 쓸 수 있다 · 게임하면서 코인을 모아서 산다"}</div>
+    ${logged ? "" : `<div class="account">${AUTH.kakao ? `<button class="kakao" id="login">카카오로 로그인</button>` : "카카오 로그인은 준비 중이다"}</div>`}
+    <div class="modebar" style="margin-top:23px"><div class="seg" id="shopTabs">
+      ${Object.entries(SHOP_TABS).map(([k,v]) => `<button data-k="${k}" class="${k===tab?"on":""}">${v}</button>`).join("")}
+    </div></div>
+    <div class="shopgrid">${data.items.filter(it => it.slot === tab).map(it => `
+      <div class="item${loadout[it.slot] === it.id ? " on" : ""}">
+        <b>${esc(it.name)}</b>
+        <u>${it.price ? it.price + " 코인" : "무료"}${owned.has(it.id) ? " · 보유" : ""}</u>
+        ${preview(it)}
+        ${action(it)}
+      </div>`).join("")}</div>
+    <div class="err" id="err"></div>
+    <button class="btn ghost" id="back" style="margin-top:23px">메뉴로</button>
+  </div>`;
+
+  wireAccount();
+  $("#back").addEventListener("click", ()=> menu());
+  $("#shopTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) shop(b.dataset.k); });
+  app.querySelectorAll("[data-listen]").forEach(b => b.addEventListener("click", ()=>{
+    const mine = SFX.pack;
+    SFX.pack = b.dataset.listen;
+    LISTEN_TAPS.forEach(t => setTimeout(()=> SFX.key(), t));
+    setTimeout(()=>{ SFX.pack = mine; }, LISTEN_TAPS.at(-1) + 100);
+  }));
+  const post = async (path, item) => {
+    const r = await authFetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({item})});
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok){ $("#err").textContent = body.error || "실패했다"; return null; }
+    return body;
+  };
+  app.querySelectorAll("[data-buy]").forEach(b => b.addEventListener("click", async ()=>{
+    b.disabled = true;   // 연타 방지(서버도 한 번만 빼지만 화면에서도 막는다)
+    const res = await post("/shop/buy", b.dataset.buy);
+    if (!res){ b.disabled = false; return; }
+    AUTH.user.coins = res.coins;
+    toast("샀다", "good");
+    shop(tab);
+  }));
+  app.querySelectorAll("[data-equip]").forEach(b => b.addEventListener("click", async ()=>{
+    const res = await post("/shop/equip", b.dataset.equip);
+    if (!res) return;
+    AUTH.user[res.slot] = res.item;
+    applyLoadout(AUTH.user);
+    shop(tab);
+  }));
 }
 
 /* ===================== 로비 ===================== */
@@ -1282,6 +1439,12 @@ function wireGame(net){
       feed(`${m.name} 탈락 · ${m.rank}위`, "out");
       if (m.id !== G.me.id) toast(m.name + " 탈락");
       if (G.target === m.id) G.target = null;
+    },
+    reward: m => {
+      if (AUTH.user) AUTH.user.coins = m.total;
+      toast(`+${m.coins} 코인${m.capped ? " · 오늘 한도" : ""}`, "good");
+      const el = $("#reward");
+      if (el) el.textContent = `+${m.coins} 코인`;
     },
     winner: m => {
       feed(`${m.name} 우승`, "out");
@@ -1508,7 +1671,12 @@ function over(win){
   const wasOnline = G.online;
   G.running = false;
   clearInterval(G.tick);
-  if (G.net) G.net.close();
+  if (G.net){
+    // 코인 지급은 판이 끝난 뒤에 온다. 보상 메시지만 남기고 잠깐 연결을 유지한다.
+    const net = G.net;
+    net.h = {reward: net.h.reward};
+    setTimeout(()=> net.close(), 5000);
+  }
   document.body.classList.remove("risk");
   const me = G.me; me.rank = me.rank || 1;
   const mins = Math.max(0, performance.now() - G.goAt) / 60000;
@@ -1517,6 +1685,7 @@ function over(win){
   <div class="over">
     <div class="big ${win?"win":""}">${win ? "WINNER" : me.rank + "위"}</div>
     <p>${win ? "마지막까지 살아남았다" : `${G.players.length}명 중 ${me.rank}위`}</p>
+    <div class="reward num" id="reward"></div>
     <div class="final">
       <div class="card"><b class="num">${Math.round(me.strokes / Math.max(mins,.01))}</b><u>평균 타/분</u></div>
       <div class="card"><b class="num">${me.done}</b><u>완료 문장</u></div>
@@ -1684,6 +1853,7 @@ if (invitedRoom && SERVER) invite(invitedRoom);
 else menu();
 // 계정은 화면을 먼저 띄운 뒤 불러와서 채운다. 기다렸다 그리면 느린 망에서 빈 화면이 오래 보인다.
 loadAccount().then(()=>{
+  applyLoadout(AUTH.user);
   const box = $("#account");
   if (box){ box.innerHTML = accountHtml(); wireAccount(); }
   const nickInput = $("#nick");

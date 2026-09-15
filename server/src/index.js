@@ -9,10 +9,11 @@
  * 각자 치고 있는 문장과 커서 위치도 받아서 다른 사람 화면(상대 카드·관전)에 뿌린다.
  *
  * 빠른 시작은 Matchmaker(전역 DO 하나)가 대기 중인 방 중 사람이 가장 많은 곳으로 보낸다.
- * 계정·카카오 로그인은 auth.js(D1)가 맡는다.
+ * 계정·카카오 로그인은 auth.js, 코인·상점·스킨은 shop.js(둘 다 D1)가 맡는다.
  */
 
 import {handleAuth, userFromToken} from "./auth.js";
+import {handleShop, grantRewards} from "./shop.js";
 
 const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
@@ -52,6 +53,12 @@ export default {
 
     const authResponse = await handleAuth(request, env, url, json);
     if (authResponse) return authResponse;
+
+    if (url.pathname.startsWith("/shop")) {
+      const token = (request.headers.get("Authorization") || "").replace(/^Bearer /, "") || null;
+      const shopResponse = await handleShop(request, env, url, json, await userFromToken(env, token));
+      if (shopResponse) return shopResponse;
+    }
 
     if (url.pathname === "/join") {
       const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
@@ -274,10 +281,12 @@ export class Room {
   start() {
     clearTimeout(this.startTimer);
     this.phase = "starting";
+    this.startedWith = this.players.size;   // 코인 계산용: 시작할 때 몇 명이었나
     this.broadcast({t: "start", countdown: COUNTDOWN_MS});
     this.report();
     this.startTimer = setTimeout(() => {
       this.phase = "playing";
+      this.playStartedAt = Date.now();
       this.elimAt = Date.now() + ELIM_MS;
       this.report();
       this.loop = setInterval(() => {
@@ -368,6 +377,26 @@ export class Room {
     this.broadcastPlayers();
     if (alive.length === 1) this.broadcast({t: "winner", id: alive[0].id, name: alive[0].name});
     this.report();
+    this.payout();
+  }
+
+  /* 끝난 판의 코인을 준다. 로그인했고, 문장을 하나라도 완성했고, 탈락 판정이 한 번은 돈 판만 준다.
+     (친구 계정으로 들어왔다 바로 나가서 우승을 챙기는 파밍을 막는다) */
+  async payout() {
+    if (!this.playStartedAt || Date.now() - this.playStartedAt < ELIM_MS) return;
+    const results = [...this.players.values()]
+      .filter(p => p.uid && p.rank && p.done > 0)
+      .map(p => ({uid: p.uid, rank: p.rank, players: this.startedWith}));
+    if (!results.length) return;
+    try {
+      const granted = await grantRewards(this.env, results);
+      for (const p of this.players.values()) {
+        const g = p.uid && granted.get(p.uid);
+        if (g) this.send(p.ws, {t: "reward", coins: g.coins, total: g.total, capped: g.capped});
+      }
+    } catch (e) {
+      console.error("coin payout failed:", e);
+    }
   }
 
   /* ---------- 전송 ---------- */

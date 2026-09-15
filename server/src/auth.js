@@ -30,7 +30,7 @@ const missingConfig = env => REQUIRED.filter(k => !env[k]);
 export async function userFromToken(env, token) {
   if (!token || !env.DB) return null;
   return await env.DB.prepare(
-    "SELECT u.id, u.nickname, u.coins, u.rating FROM sessions s JOIN users u ON u.id = s.user_id " +
+    "SELECT u.id, u.nickname, u.coins, u.rating, u.sound, u.font, u.theme FROM sessions s JOIN users u ON u.id = s.user_id " +
     "WHERE s.token_hash = ? AND s.expires_at > ?"
   ).bind(await sha256(token), Date.now()).first();
 }
