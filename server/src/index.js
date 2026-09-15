@@ -6,6 +6,7 @@
  *
  * 서버는 심판만 본다. 문장 생성과 오염은 각 클라이언트가 자기 화면에서 처리하고,
  * 서버는 진행도를 모아 순위를 매기고 탈락을 선고하며 공격을 중계한다.
+ * 각자 치고 있는 문장과 커서 위치도 받아서 다른 사람 화면(상대 카드·관전)에 뿌린다.
  *
  * 빠른 시작은 Matchmaker(전역 DO 하나)가 대기 중인 방 중 사람이 가장 많은 곳으로 보낸다.
  */
@@ -14,11 +15,14 @@ const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
 const LOBBY_WAIT_MS = 20000;    // 빠른 시작: 두 번째 사람이 들어온 뒤 이만큼 더 기다렸다가 시작
 const SOLO_WAIT_MS = 20000;     // 빠른 시작: 혼자면 이만큼 기다렸다가 봇전으로 돌려보낸다
+const COUNTDOWN_MS = 3000;      // 시작 신호 뒤 3·2·1 동안은 입력도 판정도 하지 않는다
 const ELIM_MS = 20000;          // 탈락 주기
 const STATE_HZ = 5;             // 진행도 브로드캐스트 빈도
 const HEARTBEAT_MS = 30000;     // 방이 살아 있다고 매치메이커에 알리는 주기
 const ROOM_STALE_MS = 75000;    // 이만큼 소식 없는 방은 매치메이커 목록에서 지운다
 const MAX_FIRE_BONUS = 2;       // 불붙음으로 늘어나는 공격 수 상한
+const MAX_LINE = 160;           // 중계하는 문장 길이 상한(신조어가 다 박혀도 이보다 짧다)
+const MAX_DIRTY = 40;
 const KINDS = ["anagram", "insert", "reorder"];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // 헷갈리는 I,O,0,1 제외
 
@@ -118,7 +122,7 @@ export class Room {
     this.state = state;
     this.env = env;
     this.players = new Map();   // id -> player
-    this.phase = "lobby";
+    this.phase = "lobby";       // lobby → starting(3·2·1) → playing → over
     this.code = null;
     this.auto = false;          // 빠른 시작 방이면 카운트다운으로 시작, 직접 판 방이면 방장이 시작
     this.host = null;
@@ -158,7 +162,8 @@ export class Room {
       this.heart = setInterval(() => this.report(), HEARTBEAT_MS);
     }
     const id = crypto.randomUUID().slice(0, 8);
-    const player = {id, name, ws, done: 0, prog: 0, alive: true, rank: 0, aim: null};
+    const player = {id, name, ws, done: 0, prog: 0, alive: true, rank: 0, aim: null,
+                    ready: false, line: "", pos: 0, bad: false, dt: []};
     this.players.set(id, player);
     if (!this.host) this.host = id;
 
@@ -195,7 +200,7 @@ export class Room {
       if (this.auto) this.scheduleStart();
       return;
     }
-    // 게임 중 나가면 그 자리에서 탈락 처리한다
+    // 게임 중(카운트다운 포함) 나가면 그 자리에서 탈락 처리한다
     this.broadcastPlayers();
     this.checkWinner();
   }
@@ -210,13 +215,19 @@ export class Room {
   }
 
   /* ---------- 로비 ---------- */
+  /* 직접 판 방은 방장 빼고 전원, 빠른 시작 방은 전원이 준비해야 한다 */
+  allReady() {
+    return this.players.size >= MIN_PLAYERS &&
+      [...this.players.values()].every(p => p.ready || (!this.auto && p.id === this.host));
+  }
+
   /* 빠른 시작 방 전용. 직접 판 방은 방장이 시작 버튼을 누를 때까지 그대로 기다린다. */
   scheduleStart() {
     clearTimeout(this.startTimer);
     const n = this.players.size;
     if (n === 0) return;
 
-    if (n >= MAX_PLAYERS) { this.start(); return; }
+    if (n >= MAX_PLAYERS || this.allReady()) { this.start(); return; }
 
     const wait = n >= MIN_PLAYERS ? LOBBY_WAIT_MS : SOLO_WAIT_MS;
     this.broadcast({t: "countdown", sec: Math.round(wait / 1000), players: n});
@@ -241,39 +252,58 @@ export class Room {
     }
     this.startTimer = this.loop = null;
     this.phase = "lobby";
-    for (const p of this.players.values()) { p.done = 0; p.prog = 0; p.alive = true; p.rank = 0; }
+    for (const p of this.players.values()) {
+      Object.assign(p, {done: 0, prog: 0, alive: true, rank: 0, ready: false, line: "", pos: 0, bad: false, dt: []});
+    }
   }
 
   /* ---------- 게임 ---------- */
   start() {
     clearTimeout(this.startTimer);
-    this.phase = "playing";
-    this.elimAt = Date.now() + ELIM_MS;
-    this.broadcast({t: "start", elimIn: ELIM_MS});
+    this.phase = "starting";
+    this.broadcast({t: "start", countdown: COUNTDOWN_MS});
     this.report();
-
-    this.loop = setInterval(() => {
-      if (Date.now() >= this.elimAt) {
-        this.eliminate();
-        this.elimAt = Date.now() + ELIM_MS;
-      }
-      this.broadcastPlayers();
-    }, Math.round(1000 / STATE_HZ));
+    this.startTimer = setTimeout(() => {
+      this.phase = "playing";
+      this.elimAt = Date.now() + ELIM_MS;
+      this.report();
+      this.loop = setInterval(() => {
+        if (Date.now() >= this.elimAt) {
+          this.eliminate();
+          this.elimAt = Date.now() + ELIM_MS;
+        }
+        this.broadcastPlayers();
+      }, Math.round(1000 / STATE_HZ));
+    }, COUNTDOWN_MS);
   }
 
   onMessage(p, msg) {
     if (msg.t === "prog") {
-      // 클라이언트 자기 신고다. 순위에만 쓰고 범위만 막아 둔다.
+      if (this.phase !== "playing" || !p.alive) return;
+      // 클라이언트 자기 신고다. 순위와 남에게 보여 주는 데만 쓰고 범위만 막아 둔다.
       p.done = Math.max(0, Math.min(9999, msg.done | 0));
       p.prog = Math.max(0, Math.min(1, +msg.prog || 0));
+      if (typeof msg.line === "string") {
+        p.line = msg.line.slice(0, MAX_LINE);
+        p.dt = Array.isArray(msg.dt) ? msg.dt.filter(Number.isInteger).slice(0, MAX_DIRTY) : [];
+      }
+      p.pos = Math.max(0, Math.min(p.line.length, msg.pos | 0));
+      p.bad = !!msg.bad;
       return;
     }
     if (msg.t === "aim") {
       p.aim = msg.id && this.players.has(msg.id) ? msg.id : null;
       return;
     }
+    if (msg.t === "ready") {
+      if (this.phase !== "lobby") return;
+      p.ready = !!msg.on;
+      this.broadcastPlayers();
+      if (this.auto) this.scheduleStart();
+      return;
+    }
     if (msg.t === "start") {
-      if (!this.auto && p.id === this.host && this.phase === "lobby" && this.players.size >= MIN_PLAYERS) this.start();
+      if (!this.auto && p.id === this.host && this.phase === "lobby" && this.allReady()) this.start();
       return;
     }
     if (msg.t === "done" && this.phase === "playing" && p.alive) {
@@ -312,15 +342,18 @@ export class Room {
 
   checkWinner() {
     const alive = [...this.players.values()].filter(p => p.alive);
-    if (this.phase !== "playing" || alive.length > 1) return;
+    if ((this.phase !== "playing" && this.phase !== "starting") || alive.length > 1) return;
     if (alive.length === 1) {
       alive[0].rank = 1;
       this.send(alive[0].ws, {t: "end", rank: 1, win: true});
-      this.broadcast({t: "winner", id: alive[0].id, name: alive[0].name});
     }
     this.phase = "over";
+    clearTimeout(this.startTimer);
     clearInterval(this.loop);
     this.loop = null;
+    // 관전 중인 사람도 최종 순위를 받아야 해서 순위를 한 번 더 뿌린 뒤 우승자를 알린다
+    this.broadcastPlayers();
+    if (alive.length === 1) this.broadcast({t: "winner", id: alive[0].id, name: alive[0].name});
     this.report();
   }
 
@@ -328,8 +361,8 @@ export class Room {
   send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch {} }
   broadcast(obj) { for (const p of this.players.values()) this.send(p.ws, obj); }
   broadcastPlayers() {
-    const list = [...this.players.values()]
-      .map(({id, name, done, prog, alive, rank}) => ({id, name, done, prog, alive, rank}));
+    const list = [...this.players.values()].map(({id, name, done, prog, alive, rank, ready, line, pos, bad, dt}) =>
+      ({id, name, done, prog, alive, rank, ready, line, pos, bad, dt}));
     const elimIn = this.phase === "playing" ? Math.max(0, this.elimAt - Date.now()) : 0;
     this.broadcast({t: "players", players: list, elimIn, phase: this.phase, host: this.host, auto: this.auto});
   }

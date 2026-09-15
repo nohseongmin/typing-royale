@@ -245,6 +245,38 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 }
 .board.recoil{animation:recoil .22s}
 @keyframes recoil{35%{transform:scale(.985)}}
+/* 상대가 지금 치는 문장 */
+.foe .mini{margin-top:9px;font-size:16px;line-height:1.45;white-space:pre;overflow:hidden;color:var(--dim);height:24px}
+.mini .mok,.wline .mok{color:var(--ink)}
+.mini .mno,.wline .mno{color:var(--red);background:var(--no-bg);border-radius:3px}
+.mini .mcur{box-shadow:inset 0 -2px 0 var(--acc)}
+.mini .mdt,.wline .mdt{color:var(--pink)}
+/* 관전 */
+.watchhead{text-align:center;color:var(--mute);font-size:16px;margin:5px 0 18px}
+.watchhead b{color:var(--ink)}
+.watch{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:13px}
+.wcard{background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:18px 21px}
+.wcard.dead{opacity:.4}
+.wcard .top{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.wcard .rk{font-size:13px;font-weight:800;color:var(--mute);background:var(--soft2);padding:3px 9px;border-radius:999px}
+.wcard .nm{font-size:18px;font-weight:700;flex:1}
+.wcard .dn{font-size:14px;color:var(--mute)}
+.wline{font-size:23px;line-height:1.55;white-space:pre-wrap;word-break:keep-all;color:var(--dim);min-height:72px;margin-bottom:10px}
+.wline .mcur{box-shadow:inset 0 -3px 0 var(--acc)}
+/* 결과 순위표 */
+.standings{max-width:520px;margin:0 auto 29px;display:flex;flex-direction:column;gap:7px;text-align:left}
+.srow{display:flex;align-items:center;gap:13px;background:var(--soft);border-radius:14px;padding:12px 18px;font-size:17px}
+.srow b{min-width:52px;font-weight:800}
+.srow span{flex:1;font-weight:600}
+.srow u{text-decoration:none;color:var(--mute);font-size:14px}
+.srow.me{background:var(--acc-soft)}
+.srow.first b{color:var(--acc)}
+/* 시작 카운트다운 */
+.count{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;font-size:130px;font-weight:800;color:var(--acc);background:var(--veil)}
+.count:empty{display:none}
+/* 로비 준비 */
+.slot .grow{flex:1}
+.slot .ready{font-size:13px;font-weight:800;color:var(--ok-ink);background:var(--acc-soft);padding:3px 9px;border-radius:999px}
 @media(max-width:1066px){.stage{grid-template-columns:1fr}:root{--row:99px}.fit{font-size:30px}}
 </style>
 </head>
@@ -766,6 +798,27 @@ function toggleTheme(e){
   e.currentTarget.textContent = themeLabel();
 }
 
+/* 누군가 지금 치는 문장. 나와 봇은 로컬 상태에서, 다른 사람은 서버가 중계한 값에서 읽는다. */
+const MINI_BEFORE = 4, MINI_AFTER = 13;   // 상대 카드는 좁아서 커서 주변만 잘라서 보여 준다
+function liveOf(p){
+  if (p instanceof Remote) return {text: p.line || "", pos: p.pos || 0, bad: !!p.bad, dt: p.dt || []};
+  return {text: p.text, pos: p.typed.length, bad: false, dt: [...p.line.dirty]};
+}
+/* 친 글자·틀린 글자·커서·공격받은 어절을 칠한다 */
+function lineHtml({text, pos, bad, dt}, before = Infinity, after = Infinity){
+  if (!text) return "";
+  const dirty = new Set();
+  let at = 0;
+  text.split(" ").forEach((w, i) => { if (dt.includes(i)) for (let k = 0; k < w.length; k++) dirty.add(at + k); at += w.length + 1; });
+  const a = Math.max(0, pos - before), b = Math.min(text.length, pos + after);
+  let h = "";
+  for (let i = a; i < b; i++){
+    const cls = i < pos ? (bad && i === pos - 1 ? "mno" : "mok") : i === pos ? "mcur" : dirty.has(i) ? "mdt" : "";
+    h += `<span class="${cls}">${esc(text[i])}</span>`;
+  }
+  return h;
+}
+
 /* ===================== 효과음 =====================
    소리 파일 없이 Web Audio로 합성한다. 브라우저는 사용자 입력 전에는 소리를 막아서
    첫 키 입력이나 클릭 때 컨텍스트를 연다. */
@@ -816,7 +869,8 @@ const SFX = {
   atk(){ this.hiss("bandpass", 500, 3200, .2, .22, 1.5); this.tone("triangle", 320, 880, .16, .07); },                        // 위로 올라가는 휙
   hit(){ this.tone("sine", 180, 42, .32, .45); this.hiss("lowpass", 1400, 200, .16, .3); },                                    // 묵직한 쿵
   smack(){ this.hiss("lowpass", 3200, 260, .13, .3); this.tone("square", 240, 55, .12, .1); },                                  // 상대에게 꽂히는 퍽
-  fire(){ this.hiss("bandpass", 300, 2600, .38, .2, 1); this.tone("sawtooth", 170, 540, .32, .05); }                           // 불붙는 화르르
+  fire(){ this.hiss("bandpass", 300, 2600, .38, .2, 1); this.tone("sawtooth", 170, 540, .32, .05); },                          // 불붙는 화르르
+  beep(go){ this.tone("sine", go ? 1320 : 880, go ? 1320 : 880, go ? .28 : .12, .12); }                                        // 3·2·1은 낮게, GO는 높고 길게
 };
 const sndLabel = () => SFX.muted ? "소리 끔" : "소리 켬";
 
@@ -994,20 +1048,55 @@ function menuError(msg){
   setTimeout(()=>{ const e = $("#err"); if (e) e.textContent = msg; }, 30);
 }
 
+/* 초대 링크로 들어온 사람. 바로 입장시키지 않고 닉네임부터 정하게 한다. */
+function invite(code){
+  clearInterval(menu.poll);
+  app.innerHTML = `
+  <div class="menu">
+    <div class="kicker">초대받은 방</div>
+    <div class="logo">타자 <em>배틀로얄</em></div>
+    <div class="lobby" style="margin-top:29px">
+      <div class="code">${esc(code)}</div>
+      <div class="codehint">같이 칠 때 보일 닉네임을 정해라</div>
+      <div class="field"><input id="nick" maxlength="12" placeholder="닉네임" value="${esc(lsGet("tr_nick"))}"></div>
+      <div class="field"><button class="btn" id="join" style="flex:1">입장</button></div>
+      <div class="field"><button class="btn ghost" id="toMenu" style="flex:1">메뉴로</button></div>
+    </div>
+  </div>`;
+  // 주소창에서 방 코드를 지운다. 안 지우면 판이 끝나고 새로고침할 때마다 같은 방 초대 화면이 뜬다.
+  const clearLink = () => { const u = new URL(location.href); u.searchParams.delete("room"); history.replaceState(null, "", u); };
+  const join = () => {
+    const nick = $("#nick").value.trim();
+    lsSet("tr_nick", nick);
+    clearLink();
+    lobby(code, (nick || "익명").slice(0, 12), code.startsWith("AUTO"));
+  };
+  $("#join").addEventListener("click", join);
+  $("#nick").addEventListener("keydown", e => { if (e.key === "Enter") join(); });
+  $("#toMenu").addEventListener("click", ()=>{ clearLink(); menu("online"); });
+  $("#nick").focus();
+}
+
 function lobby(code, name, auto, retry = 0){
   clearInterval(menu.poll);
   let players = [], deadline = 0, host = null, copiedAt = 0, tick = null;
 
   const render = () => {
     const left = deadline ? Math.max(0, Math.ceil((deadline - Date.now())/1000)) : null;
-    const isHost = host === lobby.you;
+    const isHost = !auto && host === lobby.you;
+    const me = players.find(p => p.id === lobby.you);
+    // 직접 판 방은 방장 빼고 전원, 빠른 시작 방은 전원이 준비해야 한다(서버와 같은 규칙)
+    const others = players.filter(p => auto || p.id !== host);
+    const readyCount = others.filter(p => p.ready).length;
+    const allReady = players.length >= 2 && readyCount === others.length;
     const status = auto
       ? (players.length < 2
           ? `상대를 기다리는 중${left !== null ? ` · <b>${left}초</b> 뒤 봇전으로 시작` : ""}`
-          : `<b>${players.length}</b>명 대기 중${left !== null ? ` · <b>${left}초</b> 뒤 시작` : ""}`)
+          : `준비 <b>${readyCount}/${players.length}</b> · 모두 준비하면 바로 시작${left !== null ? ` · <b>${left}초</b> 뒤 자동 시작` : ""}`)
       : isHost
-        ? (players.length < 2 ? "친구가 들어오면 시작할 수 있다" : `<b>${players.length}</b>명 모였다 · 준비되면 시작`)
-        : "방장이 시작하길 기다리는 중";
+        ? (players.length < 2 ? "친구가 들어오면 시작할 수 있다"
+           : allReady ? "<b>모두 준비됐다</b> · 시작해라" : `준비 <b>${readyCount}/${others.length}</b> · 다 준비해야 시작할 수 있다`)
+        : me?.ready ? "준비 완료 · 방장이 시작하길 기다리는 중" : "준비를 눌러야 방장이 시작할 수 있다";
     app.innerHTML = `
     <div class="menu">
       <div class="kicker">${auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}</div>
@@ -1017,13 +1106,15 @@ function lobby(code, name, auto, retry = 0){
           <input id="inviteUrl" readonly value="${esc(inviteLink(code))}">
           <button class="btn" id="copyLink">${Date.now() - copiedAt < 1500 ? "복사됨" : "초대 링크 복사"}</button>
         </div>
-        <div class="codehint">링크를 받은 사람은 누르기만 하면 바로 이 방에 들어온다</div>
+        <div class="codehint">링크를 받은 사람은 누르면 닉네임만 정하고 바로 이 방에 들어온다</div>
         <div class="slots">
-          ${players.map(p=>`<div class="slot">${esc(p.name)}${!auto && p.id===host?'<span class="host">방장</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}</div>`).join("")}
+          ${players.map(p=>`<div class="slot"><span class="grow">${esc(p.name)}</span>${!auto && p.id===host?'<span class="host">방장</span>':p.ready?'<span class="ready">준비</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}</div>`).join("")}
           ${Array.from({length: Math.max(0, 2 - players.length)}, ()=>`<div class="slot empty">비어 있음</div>`).join("")}
         </div>
         <div class="wait">${status}</div>
-        ${!auto && isHost ? `<div class="field"><button class="btn" id="begin" style="flex:1" ${players.length < 2 ? "disabled" : ""}>게임 시작</button></div>` : ""}
+        ${isHost
+          ? `<div class="field"><button class="btn" id="begin" style="flex:1" ${allReady ? "" : "disabled"}>게임 시작</button></div>`
+          : `<div class="field"><button class="btn${me?.ready ? " ghost" : ""}" id="ready" style="flex:1">${me?.ready ? "준비 취소" : "준비"}</button></div>`}
         <div class="field"><button class="btn ghost" id="leave" style="flex:1">나가기</button></div>
         <div class="err" id="err"></div>
       </div>
@@ -1033,6 +1124,7 @@ function lobby(code, name, auto, retry = 0){
     $("#inviteUrl").addEventListener("focus", e => e.target.select());
     $("#leave").addEventListener("click", ()=>{ stop(); menu("online"); });
     $("#begin")?.addEventListener("click", ()=> net.send({t:"start"}));
+    $("#ready")?.addEventListener("click", ()=> net.send({t:"ready", on: !me?.ready}));
   };
 
   /* 폰이면 공유창을 띄우고, PC면 클립보드에 복사한다. 클립보드가 막힌 브라우저면 링크를 선택해 둬서 Ctrl+C만 누르면 된다. */
@@ -1069,7 +1161,7 @@ function lobby(code, name, auto, retry = 0){
       }
       menuError(m.reason);
     },
-    start: m => { clearInterval(tick); start({net, code, you: lobby.you, elimIn: m.elimIn}); },
+    start: m => { clearInterval(tick); start({net, code, you: lobby.you, countdown: m.countdown}); },
     solo: () => { clearInterval(tick); net.close(); toast("상대가 없어서 봇전으로 시작한다"); start({}); },
     fail: () => { clearInterval(tick); menuError("서버에 연결하지 못했다"); },
     gone: () => { if (!G || !G.running){ clearInterval(tick); } }
@@ -1081,6 +1173,7 @@ function lobby(code, name, auto, retry = 0){
 
 /* ===================== 게임 ===================== */
 const ELIM_MS = 20000;
+const COUNTDOWN_MS = 3000;   // 시작 전 3·2·1 (서버와 같은 길이)
 const BOT_NAMES = ["알파","베타","감마","델타","엡실론","제타","에타"];
 
 function start(opts){
@@ -1089,7 +1182,7 @@ function start(opts){
   const base = DIFF[CFG.diff].cps;
   G = {players:[], me:null, target:null, running:true, nextElim:0, t0:0,
        tick:null, composing:false, committing:false, slide:false, sliding:false, rebuild:false, ver:-1, spans:[], hadErr:false,
-       net, online:!!net, code:opts.code || null, sentProg:0};
+       net, online:!!net, code:opts.code || null, sentProg:0, sentKey:"", spectating:false, goAt:0, watchOrder:""};
   G.me = new Player(opts.you || "me", "나", false);
   G.players.push(G.me);
   if (!G.online){
@@ -1099,10 +1192,12 @@ function start(opts){
       G.players.push(b);
     }
   }
+  // 3·2·1 동안은 아무도 못 친다. 온라인은 서버가 준 길이, 연습 모드도 같은 길이로 맞춘다.
   G.t0 = performance.now();
-  G.nextElim = G.t0 + (opts.elimIn || ELIM_MS);
+  G.goAt = G.t0 + (opts.countdown ?? COUNTDOWN_MS);
+  G.nextElim = G.goAt + ELIM_MS;
   if (G.online) wireGame(net);
-  G.players.forEach(p => { p.startedAt = G.t0; p.lastChar = G.t0; });
+  G.players.forEach(p => { p.startedAt = G.goAt; p.lastChar = G.goAt; });
   renderGame();
   // 렌더까지 이 인터벌 하나로 돌린다. requestAnimationFrame은 탭이 가려지거나
   // 임베드 뷰어에서 멈춰버려서 화면이 통째로 얼어붙는다.
@@ -1130,8 +1225,13 @@ function wireGame(net){
       if (m.id !== G.me.id) toast(m.name + " 탈락");
       if (G.target === m.id) G.target = null;
     },
-    winner: m => feed(`${m.name} 우승`, "out"),
-    end: m => { G.me.rank = m.rank; over(m.win); },
+    winner: m => {
+      feed(`${m.name} 우승`, "out");
+      const w = G.players.find(p => p.id === m.id);
+      if (w) w.rank = 1;
+      if (G.spectating) over(false);   // 관전하던 사람은 우승자가 나오면 최종 순위를 본다
+    },
+    end: m => { G.me.rank = m.rank; G.me.alive = !!m.win; if (m.win) over(true); else spectate(); },
     gone: () => { if (G && G.running){ toast("서버 연결이 끊겼다"); over(false); } }
   };
 }
@@ -1157,6 +1257,7 @@ function renderGame(){
         <div class="hint" id="hint"></div>
         <input id="type" autocomplete="off" autocapitalize="off" spellcheck="false">
         <div class="blur" id="blur">클릭해서 계속 입력</div>
+        <div class="count" id="count"></div>
       </div>
       <div class="feed" id="feed"></div>
     </div>
@@ -1183,6 +1284,7 @@ function renderGame(){
     const me = G.me;
     // 포커스가 입력칸을 떠나지 않게 막고 공격 대상만 돌린다
     if (e.key === "Tab"){ e.preventDefault(); cycleTarget(e.shiftKey ? -1 : 1); return; }
+    if (performance.now() < G.goAt){ e.preventDefault(); return; }   // 카운트다운 중에는 못 친다
     // 틀린 글자를 고치기 전엔 다음 글자로 못 간다. 한글 IME 입력은 keydown으로 못 막아서 onInput에서 잘라낸다.
     if (!e.isComposing && e.key.length === 1 && firstWrong(me.typed, me.text, false) >= 0){
       e.preventDefault(); me.keys++; SFX.err(); return;
@@ -1220,6 +1322,7 @@ function endComposition(){
 function onInput(){
   if (!G || !G.running || !G.me.alive) return;
   const inp = $("#type"), me = G.me, t = me.text;
+  if (performance.now() < G.goAt){ if (G.composing) endComposition(); else inp.value = ""; return; }
   let v = inp.value;
   let w = firstWrong(v, t, G.composing);
 
@@ -1299,7 +1402,7 @@ function loop(){
   const now = performance.now();
 
   for (const p of G.players){
-    if (!p.alive || !p.bot || now < p.pauseUntil) continue;
+    if (!p.alive || !p.bot || now < p.pauseUntil || now < G.goAt) continue;
     const txt = p.text;
     const slow = Math.max(.5, 1 - .2 * p.line.hits);
     const need = 1000 / (p.cps * slow);
@@ -1316,15 +1419,18 @@ function loop(){
   }
 
   if (G.online){
-    // 진행도 신고. 서버는 이걸로 순위를 매기고 꼴찌를 자른다.
-    if (now - G.sentProg > 200){
+    // 진행도와 지금 치는 문장을 신고한다. 서버는 순위를 매기고 다른 사람 화면에 뿌린다.
+    // 문장 전체는 바뀔 때만 보내고 평소엔 커서 위치만 보낸다.
+    if (G.me.alive && now >= G.goAt && now - G.sentProg > 200){
       G.sentProg = now;
-      G.net.send({t:"prog", done:G.me.done, prog:G.me.progress});
+      const me = G.me, msg = {t:"prog", done:me.done, prog:me.progress, pos:me.typed.length, bad:firstWrong(me.typed, me.text, G.composing) >= 0};
+      if (G.sentKey !== rowKey()){ G.sentKey = rowKey(); msg.line = me.text; msg.dt = [...me.line.dirty]; }
+      G.net.send(msg);
     }
   } else if (now >= G.nextElim){
     eliminate(); G.nextElim = now + ELIM_MS;
   }
-  if (G.running) draw();
+  if (G.running) G.spectating ? drawWatch() : draw();
 }
 
 function eliminate(){
@@ -1333,11 +1439,11 @@ function eliminate(){
   const loser = alive.slice().sort((a,b)=>a.score-b.score)[0];
   loser.alive = false; loser.rank = alive.length;
   feed(`${loser.name} 탈락 · ${alive.length}위`, "out");
-  if (loser === G.me) return over(false);
-  toast(loser.name + " 탈락");
+  if (loser !== G.me) toast(loser.name + " 탈락");
   if (G.target === loser.id) G.target = null;
   const left = G.players.filter(p => p.alive);
-  if (left.length === 1 && left[0] === G.me){ left[0].rank = 1; over(true); }
+  if (left.length === 1){ left[0].rank = 1; return over(left[0] === G.me); }
+  if (loser === G.me) spectate();   // 떨어져도 나가지 않고 남은 봇들을 지켜본다
 }
 
 function over(win){
@@ -1347,7 +1453,8 @@ function over(win){
   if (G.net) G.net.close();
   document.body.classList.remove("risk");
   const me = G.me; me.rank = me.rank || 1;
-  const mins = (performance.now() - G.t0) / 60000;
+  const mins = Math.max(0, performance.now() - G.goAt) / 60000;
+  const standings = G.players.slice().sort((a,b) => (a.rank || 99) - (b.rank || 99) || b.score - a.score);
   app.innerHTML = `
   <div class="over">
     <div class="big ${win?"win":""}">${win ? "WINNER" : me.rank + "위"}</div>
@@ -1357,11 +1464,64 @@ function over(win){
       <div class="card"><b class="num">${me.done}</b><u>완료 문장</u></div>
       <div class="card"><b class="num">${Math.round(mins*60)}</b><u>생존 초</u></div>
     </div>
+    <div class="standings">${standings.map(p => `<div class="srow${p === me ? " me" : ""}${p.rank === 1 ? " first" : ""}"><b>${p.rank ? p.rank + "위" : "-"}</b><span>${esc(p === me ? "나" : p.name)}</span><u>${p.done}문장</u></div>`).join("")}</div>
     <button class="btn" id="again">${wasOnline ? "새 판 찾기" : "다시 하기"}</button>
     <button class="btn ghost" id="back">메뉴로</button>
   </div>`;
   $("#again").addEventListener("click", ()=> wasOnline ? menu("online") : start({}));
   $("#back").addEventListener("click", ()=> menu());
+}
+
+/* ---------- 관전 ---------- */
+/* 탈락해도 게임은 계속된다. 남은 사람들이 치는 문장을 크게 보여 준다. */
+function spectate(){
+  G.spectating = true;
+  G.watchOrder = "";
+  document.body.classList.remove("risk");
+  app.innerHTML = `
+  <div class="hud" id="hud">
+    <span class="tleft" id="tleft"></span>
+    <span class="tick"><i id="tbar"></i></span>
+    <span class="stat"><b class="num">${G.me.rank || "-"}</b><u>위로 탈락</u></span>
+    <button class="snd" id="quit">나가기</button>
+  </div>
+  <div class="watchhead"><b>관전 중</b> · 남은 사람들이 치는 걸 보고 있다</div>
+  <div class="watch" id="watch"></div>`;
+  $("#quit").addEventListener("click", quitGame);
+}
+function quitGame(){
+  const wasOnline = G.online;
+  G.running = false;
+  clearInterval(G.tick);
+  if (G.net) G.net.close();
+  document.body.classList.remove("risk");
+  menu(wasOnline ? "online" : "solo");
+}
+function drawWatch(){
+  const now = performance.now(), left = Math.max(0, G.nextElim - now);
+  $("#tleft").textContent = `다음 탈락 ${(left/1000).toFixed(1)}초`;
+  $("#tbar").style.width = Math.min(100, left / ELIM_MS * 100) + "%";
+  const list = G.players.filter(p => p !== G.me).sort((a,b) => (b.alive - a.alive) || (b.score - a.score));
+  const box = $("#watch"), order = list.map(p => p.id).join();
+  if (G.watchOrder !== order){   // 순위가 바뀔 때만 카드를 다시 배치한다
+    G.watchOrder = order;
+    box.innerHTML = list.map(p => `
+      <div class="wcard" id="w-${p.id}">
+        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}</span><span class="dn"></span></div>
+        <div class="wline"></div>
+        <div class="pbar"><i></i></div>
+      </div>`).join("");
+  }
+  const ranked = list.filter(p => p.alive);
+  for (const p of list){
+    const el = $("#w-" + p.id); if (!el) continue;
+    el.classList.toggle("dead", !p.alive);
+    el.querySelector(".rk").textContent = p.alive ? (ranked.indexOf(p) + 1) + "위" : (p.rank ? p.rank + "위 탈락" : "탈락");
+    el.querySelector(".dn").textContent = p.done + "문장";
+    el.querySelector(".pbar i").style.width = (p.progress * 100) + "%";
+    const line = el.querySelector(".wline"), html = p.alive ? lineHtml(liveOf(p)) : "";
+    if (line._h !== html){ line._h = html; line.innerHTML = html; }
+  }
 }
 
 /* ---------- 렌더 ---------- */
@@ -1370,6 +1530,9 @@ function draw(){
 
   if (G.slide){ G.slide = false; G.rebuild = false; advance(); }
   else if (!G.sliding && (G.rebuild || G.ver !== rowKey())){ G.rebuild = false; buildRows(); }
+
+  const toGo = G.goAt - now, cd = toGo > 0 ? String(Math.ceil(toGo / 1000)) : toGo > -600 ? "GO" : "";
+  if ($("#count").textContent !== cd){ $("#count").textContent = cd; if (cd) SFX.beep(cd === "GO"); }
 
   const left = Math.max(0, G.nextElim - now);
   $("#tleft").textContent = `다음 탈락 ${(left/1000).toFixed(1)}초`;
@@ -1415,7 +1578,7 @@ function draw(){
   const wrongIme = last && ((HANGUL.test(last) && LATIN.test(expect)) || (LATIN.test(last) && HANGUL.test(expect)));
   $("#hint").innerHTML = wrongIme ? "<b>한/영 키를 눌러라</b>" : inc ? `대기 중인 공격 <b>${inc}</b>` : "";
 
-  const mins = (now - G.t0) / 60000;
+  const mins = Math.max(0, now - G.goAt) / 60000;
   const good = [...typed].filter((c,i)=>c === t[i]).join("");
   $("#sCpm").textContent = Math.round((me.strokes + strokes(good)) / Math.max(mins,.01));
   $("#sAcc").textContent = me.keys ? Math.min(100, Math.round((me.strokes + strokes(good)) / me.keys * 100)) : 100;
@@ -1438,6 +1601,7 @@ function draw(){
         <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}</span><span class="dn"></span></div>
         <div class="pbar"><i></i></div>
         <div class="meta"><span class="load"></span><span class="sp"></span></div>
+        <div class="mini"></div>
       </div>`).join("");
   }
   for (const p of foes){
@@ -1449,13 +1613,15 @@ function draw(){
     el.querySelector(".rk").textContent = p.alive ? (ranked.indexOf(p)+1) + "위" : "OUT";
     el.querySelector(".load").textContent = p.alive && p.incoming ? "적재 " + p.incoming : "";
     el.querySelector(".sp").textContent = p.alive && p.cps ? Math.round(p.cps*strokesPerChar()*60) + "타/분" : "";
+    const mini = el.querySelector(".mini"), mh = p.alive ? lineHtml(liveOf(p), MINI_BEFORE, MINI_AFTER) : "";
+    if (mini._h !== mh){ mini._h = mh; mini.innerHTML = mh; }
   }
 
 }
 
-// 초대 링크(?room=코드)로 들어오면 메뉴를 건너뛰고 바로 그 방으로 간다
+// 초대 링크(?room=코드)로 들어오면 닉네임부터 정하고 그 방으로 간다
 const invitedRoom = (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
-if (invitedRoom && SERVER) lobby(invitedRoom, lsGet("tr_nick") || "익명", invitedRoom.startsWith("AUTO"));
+if (invitedRoom && SERVER) invite(invitedRoom);
 else menu();
 </script>
 </body>
