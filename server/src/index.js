@@ -9,11 +9,14 @@
  * 각자 치고 있는 문장과 커서 위치도 받아서 다른 사람 화면(상대 카드·관전)에 뿌린다.
  *
  * 빠른 시작은 Matchmaker(전역 DO 하나)가 대기 중인 방 중 사람이 가장 많은 곳으로 보낸다.
- * 계정·카카오 로그인은 auth.js, 코인·상점·스킨은 shop.js(둘 다 D1)가 맡는다.
+ * 계정·카카오 로그인은 auth.js, 코인·상점·스킨은 shop.js, 랭크전 레이팅은 rank.js(모두 D1)가 맡는다.
+ * 사람이 칠 수 없는 속도의 완료 신고는 anticheat.js 기준으로 걸러낸다.
  */
 
 import {handleAuth, userFromToken} from "./auth.js";
 import {handleShop, grantRewards} from "./shop.js";
+import {handleRank, applyRatings} from "./rank.js";
+import {strokes, minSentenceMs, MAX_STROKES_PER_SEC, SUSPECT_STRIKES} from "./anticheat.js";
 
 const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
@@ -43,7 +46,8 @@ const randomCode = () =>
 
 /* 방 코드는 대소문자를 가리지 않고, 링크로 돌려도 깨지지 않게 정규화한다 */
 const normCode = raw => (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
-const isAutoCode = code => code.startsWith("AUTO");
+const isAutoCode = code => code.startsWith("AUTO") || code.startsWith("RANK");   // 빠른 시작·랭크전은 카운트다운으로 시작
+const isRankedCode = code => code.startsWith("RANK");
 const matchmaker = env => env.MATCH.get(env.MATCH.idFromName("global"));
 
 export default {
@@ -60,9 +64,13 @@ export default {
       if (shopResponse) return shopResponse;
     }
 
+    const rankResponse = await handleRank(request, env, url, json);
+    if (rankResponse) return rankResponse;
+
     if (url.pathname === "/join") {
       const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
-      const r = await matchmaker(env).fetch("https://mm/join?lang=" + lang);
+      const ranked = url.searchParams.get("ranked") === "1" ? "&ranked=1" : "";
+      const r = await matchmaker(env).fetch("https://mm/join?lang=" + lang + ranked);
       return json(await r.json());
     }
 
@@ -104,23 +112,24 @@ export class Matchmaker {
     if (url.pathname === "/report") {
       const r = await request.json();
       if (!r.players) this.rooms.delete(r.code);
-      else this.rooms.set(r.code, {auto: r.auto, lang: r.lang, phase: r.phase, players: r.players, at: now});
+      else this.rooms.set(r.code, {auto: r.auto, ranked: r.ranked, lang: r.lang, phase: r.phase, players: r.players, at: now});
       return new Response("ok");
     }
 
     if (url.pathname === "/join") {
       const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
+      const ranked = url.searchParams.get("ranked") === "1";   // 랭크전과 일반 빠른 시작은 대기열이 따로다
       let best = null;
       for (const [code, r] of this.rooms) {
-        if (!r.auto || r.lang !== lang || r.phase !== "lobby" || r.players >= MAX_PLAYERS) continue;
+        if (!r.auto || !!r.ranked !== ranked || r.lang !== lang || r.phase !== "lobby" || r.players >= MAX_PLAYERS) continue;
         if (!best || r.players > this.rooms.get(best).players) best = code;
       }
       if (best) {
         this.rooms.get(best).players++;   // 곧 들어올 사람 자리를 미리 잡아 둔다. 방이 보고하면 실제 값으로 덮인다.
         return Response.json({code: best});
       }
-      const code = "AUTO" + (lang === "en" ? "EN" : "") + randomCode();
-      this.rooms.set(code, {auto: true, lang, phase: "lobby", players: 1, at: now});
+      const code = (ranked ? "RANK" : "AUTO") + (lang === "en" ? "EN" : "") + randomCode();
+      this.rooms.set(code, {auto: true, ranked, lang, phase: "lobby", players: 1, at: now});
       return Response.json({code});
     }
 
@@ -144,6 +153,8 @@ export class Room {
     this.phase = "lobby";       // lobby → starting(3·2·1) → playing → over
     this.code = null;
     this.auto = false;          // 빠른 시작 방이면 카운트다운으로 시작, 직접 판 방이면 방장이 시작
+    this.ranked = false;        // 랭크전: 로그인한 사람만, 봇전 전환 없음, 끝나면 레이팅 반영
+    this.departed = [];         // 게임 중에 나간 사람(랭크전 레이팅 계산에 넣는다)
     this.host = null;
     this.startTimer = null;
     this.loop = null;
@@ -163,6 +174,7 @@ export class Room {
 
     this.code = normCode(url.searchParams.get("room"));
     this.auto = isAutoCode(this.code);
+    this.ranked = isRankedCode(this.code);
     const name = (url.searchParams.get("name") || "익명").slice(0, 12);
     const lang = url.searchParams.get("lang") === "en" ? "en" : "ko";
     const uid = Number(url.searchParams.get("uid")) || null;   // 로그인 안 했으면 null
@@ -176,6 +188,9 @@ export class Room {
 
     if (this.phase !== "lobby") { this.kick(ws, "이미 시작한 방이다"); return; }
     if (this.players.size >= MAX_PLAYERS) { this.kick(ws, "방이 찼다"); return; }
+    if (this.ranked && !uid) { this.kick(ws, "랭크전은 로그인해야 한다"); return; }
+    // 한 계정으로 탭 두 개 띄워서 자기끼리 붙는 걸 막는다
+    if (this.ranked && [...this.players.values()].some(p => p.uid === uid)) { this.kick(ws, "이미 이 방에 들어와 있다"); return; }
 
     if (this.players.size === 0) {
       this.lang = lang;
@@ -183,7 +198,8 @@ export class Room {
     }
     const id = crypto.randomUUID().slice(0, 8);
     const player = {id, uid, name, ws, done: 0, prog: 0, alive: true, rank: 0, aim: null,
-                    ready: false, line: "", pos: 0, bad: false, dt: []};
+                    ready: false, line: "", pos: 0, bad: false, dt: [],
+                    lineStrokes: 0, progAt: 0, lastDoneAt: 0, strikes: 0, suspect: false};
     this.players.set(id, player);
     if (!this.host) this.host = id;
 
@@ -209,7 +225,15 @@ export class Room {
   }
 
   remove(id) {
-    if (!this.players.delete(id)) return;
+    const leaver = this.players.get(id);
+    if (!leaver) return;
+    if ((this.phase === "playing" || this.phase === "starting") && leaver.alive) {
+      // 게임 중에 나가면 남은 사람 중 꼴찌로 친다. 랭크전에서 지고 있을 때 나가서 점수를 지키는 걸 막는다.
+      leaver.rank = [...this.players.values()].filter(p => p.alive).length;
+      leaver.alive = false;
+      this.departed.push(leaver);
+    }
+    this.players.delete(id);
     // 방장이 나가면 남은 사람 중 먼저 들어온 사람이 방장이 된다
     if (this.host === id) this.host = this.players.keys().next().value || null;
     // 마지막 사람이 나가면 방을 비운다. 안 그러면 끝난 방 코드가 계속 입장 거부한다.
@@ -230,7 +254,7 @@ export class Room {
     if (!this.code) return;
     matchmaker(this.env).fetch("https://mm/report", {
       method: "POST",
-      body: JSON.stringify({code: this.code, auto: this.auto, lang: this.lang, phase: this.phase, players: this.players.size})
+      body: JSON.stringify({code: this.code, auto: this.auto, ranked: this.ranked, lang: this.lang, phase: this.phase, players: this.players.size})
     }).catch(() => {});
   }
 
@@ -248,6 +272,7 @@ export class Room {
     if (n === 0) return;
 
     if (n >= MAX_PLAYERS || this.allReady()) { this.start(); return; }
+    if (this.ranked && n < MIN_PLAYERS) return;   // 랭크전은 봇전으로 넘기지 않고 상대가 올 때까지 기다린다
 
     const wait = n >= MIN_PLAYERS ? LOBBY_WAIT_MS : SOLO_WAIT_MS;
     this.broadcast({t: "countdown", sec: Math.round(wait / 1000), players: n});
@@ -282,11 +307,13 @@ export class Room {
     clearTimeout(this.startTimer);
     this.phase = "starting";
     this.startedWith = this.players.size;   // 코인 계산용: 시작할 때 몇 명이었나
+    this.departed = [];
     this.broadcast({t: "start", countdown: COUNTDOWN_MS});
     this.report();
     this.startTimer = setTimeout(() => {
       this.phase = "playing";
       this.playStartedAt = Date.now();
+      for (const p of this.players.values()) p.lastDoneAt = p.progAt = this.playStartedAt;
       this.elimAt = Date.now() + ELIM_MS;
       this.report();
       this.loop = setInterval(() => {
@@ -302,13 +329,17 @@ export class Room {
   onMessage(p, msg) {
     if (msg.t === "prog") {
       if (this.phase !== "playing" || !p.alive) return;
-      // 클라이언트 자기 신고다. 순위와 남에게 보여 주는 데만 쓰고 범위만 막아 둔다.
-      p.done = Math.max(0, Math.min(9999, msg.done | 0));
-      p.prog = Math.max(0, Math.min(1, +msg.prog || 0));
+      // 클라이언트 자기 신고다. 완료 수는 서버가 done 메시지로 직접 세고, 여기서는 받지 않는다.
+      const now = Date.now();
       if (typeof msg.line === "string") {
-        p.line = msg.line.slice(0, MAX_LINE);
+        const line = msg.line.slice(0, MAX_LINE);
+        if (line !== p.line) { p.line = line; p.lineStrokes = strokes(line); p.prog = 0; }   // 새 문장이면 진행도를 처음부터
         p.dt = Array.isArray(msg.dt) ? msg.dt.filter(Number.isInteger).slice(0, MAX_DIRTY) : [];
       }
+      // 진행도는 사람이 칠 수 있는 속도 이상으로 오르지 못한다
+      const cap = p.prog + (p.progAt ? (now - p.progAt) / 1000 : 0) * MAX_STROKES_PER_SEC / Math.max(1, p.lineStrokes);
+      p.progAt = now;
+      p.prog = Math.max(0, Math.min(1, cap, +msg.prog || 0));
       p.pos = Math.max(0, Math.min(p.line.length, msg.pos | 0));
       p.bad = !!msg.bad;
       return;
@@ -331,6 +362,18 @@ export class Room {
     if (msg.t === "done" && this.phase === "playing" && p.alive) {
       // 공격 종류와 발수는 서버가 정한다. 클라이언트가 고르게 두면 제일 아픈 것만 고른다.
       // 불붙음 보너스는 클라이언트 신고라 상한을 둔다.
+      const now = Date.now();
+      if (now - p.lastDoneAt < minSentenceMs(p.lineStrokes)) {
+        // 사람이 칠 수 없는 속도의 완료는 공격도 순위도 인정하지 않는다
+        p.strikes++;
+        if (p.strikes >= SUSPECT_STRIKES && !p.suspect) {
+          p.suspect = true;
+          console.warn("too-fast completions; excluding from rewards:", this.code, p.id, p.uid);
+        }
+        return;
+      }
+      p.lastDoneAt = now;
+      p.done++;
       const fast = +msg.ms > 0 && +msg.ms < 12000;
       const shots = (fast ? 2 : 1) + Math.max(0, Math.min(MAX_FIRE_BONUS, msg.fire | 0));
       for (let i = 0; i < shots; i++) this.fire(p);
@@ -383,19 +426,33 @@ export class Room {
   /* 끝난 판의 코인을 준다. 로그인했고, 문장을 하나라도 완성했고, 탈락 판정이 한 번은 돈 판만 준다.
      (친구 계정으로 들어왔다 바로 나가서 우승을 챙기는 파밍을 막는다) */
   async payout() {
-    if (!this.playStartedAt || Date.now() - this.playStartedAt < ELIM_MS) return;
-    const results = [...this.players.values()]
-      .filter(p => p.uid && p.rank && p.done > 0)
-      .map(p => ({uid: p.uid, rank: p.rank, players: this.startedWith}));
-    if (!results.length) return;
+    if (!this.playStartedAt) return;   // 3·2·1 중에 끝난 판은 아무것도 안 준다
+    const fullGame = Date.now() - this.playStartedAt >= ELIM_MS;
     try {
+      // 랭크전 레이팅: 나간 사람도 포함한다. 속도 검사에 걸린 사람은 뺀다.
+      // 너무 짧게 끝난 판(부계정이 들어왔다 바로 나감)은 나간 쪽 손실만 반영하고 남은 사람은 못 얻는다.
+      if (this.ranked) {
+        const entries = [...this.players.values(), ...this.departed]
+          .filter(p => p.uid && p.rank && !p.suspect)
+          .map(p => ({uid: p.uid, rank: p.rank}));
+        const ratings = await applyRatings(this.env, entries, {onlyLosses: !fullGame});
+        for (const p of this.players.values()) {
+          const r = p.uid && ratings.get(p.uid);
+          if (r) this.send(p.ws, {t: "rating", ...r});
+        }
+      }
+      if (!fullGame) return;
+      const results = [...this.players.values()]
+        .filter(p => p.uid && p.rank && p.done > 0 && !p.suspect)
+        .map(p => ({uid: p.uid, rank: p.rank, players: this.startedWith}));
+      if (!results.length) return;
       const granted = await grantRewards(this.env, results);
       for (const p of this.players.values()) {
         const g = p.uid && granted.get(p.uid);
         if (g) this.send(p.ws, {t: "reward", coins: g.coins, total: g.total, capped: g.capped});
       }
     } catch (e) {
-      console.error("coin payout failed:", e);
+      console.error("payout failed:", e);
     }
   }
 

@@ -9,6 +9,8 @@
  * 필요한 설정: KAKAO_REST_KEY, KAKAO_CLIENT_SECRET (wrangler secret), APP_ORIGIN (wrangler.toml vars)
  */
 
+import {tierOf} from "./rank.js";
+
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const NICK_MAX = 12;
@@ -30,7 +32,7 @@ const missingConfig = env => REQUIRED.filter(k => !env[k]);
 export async function userFromToken(env, token) {
   if (!token || !env.DB) return null;
   return await env.DB.prepare(
-    "SELECT u.id, u.nickname, u.coins, u.rating, u.sound, u.font, u.theme FROM sessions s JOIN users u ON u.id = s.user_id " +
+    "SELECT u.id, u.nickname, u.coins, u.rating, u.ranked_games, u.sound, u.font, u.theme FROM sessions s JOIN users u ON u.id = s.user_id " +
     "WHERE s.token_hash = ? AND s.expires_at > ?"
   ).bind(await sha256(token), Date.now()).first();
 }
@@ -123,7 +125,7 @@ export async function handleAuth(request, env, url, json) {
       await env.DB.prepare("UPDATE users SET nickname = ? WHERE id = ?").bind(nickname, user.id).run();
       user.nickname = nickname;
     }
-    return json({user});
+    return json({user: {...user, tier: tierOf(user.rating)}});
   }
 
   if (url.pathname === "/logout" && request.method === "POST") {

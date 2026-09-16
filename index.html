@@ -300,6 +300,11 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 .reward{margin-top:10px;font-size:22px;font-weight:800;color:#d97706;min-height:30px}
 /* 글꼴 스킨은 치는 문장에만 입힌다. 메뉴·숫자까지 바뀌면 읽기 힘들다. */
 .fit,.wline,.foe .mini{font-family:var(--type-font, inherit)}
+/* 랭크전 */
+.btn.rankbtn{background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 8px 23px rgba(239,68,68,.25)}
+.tier{font-size:13px;font-weight:800;color:#b45309;background:color-mix(in srgb, #f59e0b 18%, var(--bg));padding:3px 10px;border-radius:999px}
+.rating{margin-top:6px;font-size:18px;color:var(--mute);min-height:26px}
+.rating b{color:var(--ink)}
 @media(max-width:1066px){.stage{grid-template-columns:1fr}:root{--row:99px}.fit{font-size:30px}}
 </style>
 </head>
@@ -991,7 +996,7 @@ async function logout(){
   AUTH.token = ""; AUTH.user = null; lsSet("tr_session", "");
 }
 const accountHtml = () => AUTH.user
-  ? `<b>${esc(AUTH.user.nickname)}</b><span><span class="coin num">${AUTH.user.coins}</span> 코인</span><button class="linkbtn" id="logout">로그아웃</button>`
+  ? `<b>${esc(AUTH.user.nickname)}</b><span class="tier">${esc(AUTH.user.tier || "")} ${AUTH.user.rating}</span><span><span class="coin num">${AUTH.user.coins}</span> 코인</span><button class="linkbtn" id="logout">로그아웃</button>`
   : "";   // 기본은 게스트. 로그인 버튼은 상점 안에 있다
 function wireAccount(){
   $("#login")?.addEventListener("click", ()=>{ location.href = httpBase() + "/auth/kakao/start"; });
@@ -1052,6 +1057,7 @@ function menu(mode){
     <div class="account" id="account">${accountHtml()}</div>
     <div class="modebar">
       <button class="snd" id="shopBtn">상점</button>
+      <button class="snd" id="rankBtn">랭킹</button>
       <div class="seg" id="segMode">
         <button data-k="online" class="${mode!=="solo"?"on":""}">온라인 대전</button>
         <button data-k="solo" class="${mode==="solo"?"on":""}">연습 모드</button>
@@ -1080,7 +1086,7 @@ function menu(mode){
     ` : `
       <div class="lobby">
         <div class="field"><input id="nick" maxlength="12" placeholder="닉네임" value="${esc(AUTH.user?.nickname || nick)}"></div>
-        <div class="field"><button class="btn" id="quick" style="flex:1">빠른 시작</button></div>
+        <div class="field"><button class="btn" id="quick" style="flex:1">빠른 시작</button><button class="btn rankbtn" id="ranked">랭크전</button></div>
         <div class="field">
           <input id="code" maxlength="8" placeholder="방 코드" style="text-transform:uppercase">
           <button class="btn ghost" id="enter">입장</button>
@@ -1111,6 +1117,7 @@ function menu(mode){
   $("#theme").addEventListener("click", toggleTheme);
   wireAccount();
   $("#shopBtn").addEventListener("click", ()=> shop());
+  $("#rankBtn").addEventListener("click", ()=> leaderboard());
   seg("#segDiff","diff",String);
   seg("#segBots","bots",Number);
 
@@ -1146,6 +1153,11 @@ function menu(mode){
   $("#quick").addEventListener("click", guard(async ()=>{
     lobby((await ask("/join?lang=" + CFG.lang)).code, nickOf(), true);
   }));
+  $("#ranked").addEventListener("click", guard(async ()=>{
+    // 레이팅을 계정에 저장해야 해서 랭크전은 로그인한 사람만 한다
+    if (!AUTH.user) throw new Error("랭크전은 카카오 로그인이 필요하다 · 상점에서 로그인할 수 있다");
+    lobby((await ask("/join?lang=" + CFG.lang + "&ranked=1")).code, nickOf(), true);
+  }));
   $("#make").addEventListener("click", guard(async ()=>{
     lobby((await ask("/new")).code, nickOf(), false);
   }));
@@ -1157,6 +1169,32 @@ function menu(mode){
   }));
   $("#code").addEventListener("keydown", e => { if (e.key === "Enter") $("#enter").click(); });
   $("#nick").addEventListener("keydown", e => { if (e.key === "Enter") $("#quick").click(); });
+}
+
+/* ===================== 랭킹 ===================== */
+async function leaderboard(){
+  clearInterval(menu.poll);
+  app.innerHTML = `<div class="menu"><div class="kicker">RANKING</div><div class="logo">랭크전 <em>순위</em></div><div class="wait" style="margin-top:31px">불러오는 중</div></div>`;
+  let top = null;
+  try {
+    const r = await fetch(httpBase() + "/rank/top");
+    if (!r.ok) throw new Error("status " + r.status);
+    top = (await r.json()).top;
+  } catch (e) {
+    console.error("순위를 못 불러왔다", e);
+  }
+  app.innerHTML = `
+  <div class="menu">
+    <div class="kicker">RANKING</div>
+    <div class="logo">랭크전 <em>순위</em></div>
+    <div class="sub">${AUTH.user ? `내 레이팅 <b>${AUTH.user.rating}</b> · ${esc(AUTH.user.tier || "")}` : "랭크전은 카카오 로그인하고 할 수 있다"}</div>
+    <div class="standings" style="margin-top:29px">${
+      top === null ? `<div class="wait">순위를 불러오지 못했다</div>`
+      : top.length ? top.map((p, i) => `<div class="srow${i === 0 ? " first" : ""}"><b>${i + 1}위</b><span>${esc(p.nickname)}</span><u>${esc(p.tier)} · ${p.rating}</u></div>`).join("")
+      : `<div class="wait">아직 랭크전 기록이 없다</div>`}</div>
+    <button class="btn ghost" id="back">메뉴로</button>
+  </div>`;
+  $("#back").addEventListener("click", ()=> menu());
 }
 
 /* ===================== 상점 ===================== */
@@ -1295,6 +1333,7 @@ function invite(code){
 function lobby(code, name, auto, retry = 0){
   clearInterval(menu.poll);
   let players = [], deadline = 0, host = null, copiedAt = 0, tick = null;
+  const ranked = code.startsWith("RANK"), since = Date.now();
 
   const render = () => {
     const left = deadline ? Math.max(0, Math.ceil((deadline - Date.now())/1000)) : null;
@@ -1306,7 +1345,8 @@ function lobby(code, name, auto, retry = 0){
     const allReady = players.length >= 2 && readyCount === others.length;
     const status = auto
       ? (players.length < 2
-          ? `상대를 기다리는 중${left !== null ? ` · <b>${left}초</b> 뒤 봇전으로 시작` : ""}`
+          ? (ranked ? `랭크전 상대를 찾는 중 · <b>${Math.floor((Date.now() - since) / 1000)}초</b>`   // 랭크전은 봇전으로 안 넘어간다
+                    : `상대를 기다리는 중${left !== null ? ` · <b>${left}초</b> 뒤 봇전으로 시작` : ""}`)
           : `준비 <b>${readyCount}/${players.length}</b> · 모두 준비하면 바로 시작${left !== null ? ` · <b>${left}초</b> 뒤 자동 시작` : ""}`)
       : isHost
         ? (players.length < 2 ? "친구가 들어오면 시작할 수 있다"
@@ -1314,7 +1354,7 @@ function lobby(code, name, auto, retry = 0){
         : me?.ready ? "준비 완료 · 방장이 시작하길 기다리는 중" : "준비를 눌러야 방장이 시작할 수 있다";
     app.innerHTML = `
     <div class="menu">
-      <div class="kicker">${auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}</div>
+      <div class="kicker">${ranked ? "랭크전" : auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}</div>
       <div class="lobby" style="margin-top:29px">
         <div class="code" id="copy" title="눌러서 초대 링크 복사">${esc(code)}</div>
         <div class="field invite">
@@ -1369,7 +1409,7 @@ function lobby(code, name, auto, retry = 0){
       stop();
       // 빠른 시작은 배정받고 들어가는 사이에 방이 차거나 시작할 수 있다. 조용히 다른 방을 다시 받는다.
       if (auto && retry < 2){
-        fetch(httpBase() + "/join?lang=" + CFG.lang).then(r => r.json())
+        fetch(httpBase() + "/join?lang=" + CFG.lang + (ranked ? "&ranked=1" : "")).then(r => r.json())
           .then(j => lobby(j.code, name, true, retry + 1))
           .catch(() => menuError("서버에 연결하지 못했다"));
         return;
@@ -1383,7 +1423,7 @@ function lobby(code, name, auto, retry = 0){
   });
 
   render();
-  tick = setInterval(()=>{ if (deadline || Date.now() - copiedAt < 2000) render(); }, 500);   // 카운트다운이나 복사 안내가 있을 때만 다시 그린다
+  tick = setInterval(()=>{ if (deadline || Date.now() - copiedAt < 2000 || (ranked && players.length < 2)) render(); }, 500);   // 카운트다운이나 복사 안내가 있을 때만 다시 그린다
 }
 
 /* ===================== 게임 ===================== */
@@ -1439,6 +1479,13 @@ function wireGame(net){
       feed(`${m.name} 탈락 · ${m.rank}위`, "out");
       if (m.id !== G.me.id) toast(m.name + " 탈락");
       if (G.target === m.id) G.target = null;
+    },
+    rating: m => {
+      if (AUTH.user){ AUTH.user.rating = m.after; AUTH.user.tier = m.tier; }
+      const sign = m.delta > 0 ? "+" : "";
+      toast(`레이팅 ${sign}${m.delta} · ${m.tier}`, m.delta >= 0 ? "good" : "");
+      const el = $("#ratingLine");
+      if (el) el.innerHTML = `레이팅 ${m.before} → <b>${m.after}</b> (${sign}${m.delta}) · ${esc(m.tier)}`;
     },
     reward: m => {
       if (AUTH.user) AUTH.user.coins = m.total;
@@ -1674,7 +1721,7 @@ function over(win){
   if (G.net){
     // 코인 지급은 판이 끝난 뒤에 온다. 보상 메시지만 남기고 잠깐 연결을 유지한다.
     const net = G.net;
-    net.h = {reward: net.h.reward};
+    net.h = {reward: net.h.reward, rating: net.h.rating};
     setTimeout(()=> net.close(), 5000);
   }
   document.body.classList.remove("risk");
@@ -1686,6 +1733,7 @@ function over(win){
     <div class="big ${win?"win":""}">${win ? "WINNER" : me.rank + "위"}</div>
     <p>${win ? "마지막까지 살아남았다" : `${G.players.length}명 중 ${me.rank}위`}</p>
     <div class="reward num" id="reward"></div>
+    <div class="rating" id="ratingLine"></div>
     <div class="final">
       <div class="card"><b class="num">${Math.round(me.strokes / Math.max(mins,.01))}</b><u>평균 타/분</u></div>
       <div class="card"><b class="num">${me.done}</b><u>완료 문장</u></div>
