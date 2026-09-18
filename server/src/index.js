@@ -13,7 +13,7 @@
  * 사람이 칠 수 없는 속도의 완료 신고는 anticheat.js 기준으로 걸러낸다.
  */
 
-import {handleAuth, userFromToken} from "./auth.js";
+import {handleAuth, userFromToken, cleanNick} from "./auth.js";
 import {handleShop, grantRewards} from "./shop.js";
 import {handleRank, applyRatings} from "./rank.js";
 import {strokes, minSentenceMs, MAX_STROKES_PER_SEC, SUSPECT_STRIKES} from "./anticheat.js";
@@ -32,6 +32,11 @@ const MAX_LINE = 160;           // 중계하는 문장 길이 상한(신조어�
 const MAX_DIRTY = 40;
 const KINDS = ["anagram", "insert", "reorder"];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // 헷갈리는 I,O,0,1 제외
+const MAX_MSGS_PER_SEC = 20;    // 클라이언트는 초당 5번쯤 보낸다. 넘치는 건 버린다
+const FLOOD_KICK_PER_SEC = 60;  // 이만큼 쏟아내면 끊는다(준비 연타로 방 전체 브로드캐스트를 폭주시키는 걸 막는다)
+const MAX_MSG_CHARS = 2048;
+const WS_PROTOCOL = "tr.v1";
+const WS_AUTH_PREFIX = "auth."; // 로그인 토큰은 주소 대신 서브프로토콜 헤더로 받는다. 주소는 로그에 남는다.
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -49,6 +54,7 @@ const normCode = raw => (raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slic
 const isAutoCode = code => code.startsWith("AUTO") || code.startsWith("RANK");   // 빠른 시작·랭크전은 카운트다운으로 시작
 const isRankedCode = code => code.startsWith("RANK");
 const matchmaker = env => env.MATCH.get(env.MATCH.idFromName("global"));
+const wsProtocols = request => (request.headers.get("Sec-WebSocket-Protocol") || "").split(",").map(s => s.trim());
 
 export default {
   async fetch(request, env) {
@@ -84,12 +90,17 @@ export default {
     if (url.pathname === "/ws") {
       const code = normCode(url.searchParams.get("room"));
       if (!code) return json({error: "room code required"}, 400);
-      // 로그인한 사람이면 계정 id와 닉네임을 방에 넘긴다. 클라이언트가 보낸 uid는 믿지 않고 지운다.
-      // (웹소켓은 헤더를 못 붙여서 토큰이 쿼리로 온다. 방에는 넘기지 않는다.)
+      // 랭크전 방은 매치메이커가 만든 것만 들어간다. 코드를 지어내서 부계정끼리 비공개 랭크전을 돌리는 걸 막는다.
+      if (isRankedCode(code) && !(await matchmaker(env).fetch("https://mm/issued?code=" + code)).ok) {
+        return json({error: "없는 랭크전 방이다"}, 403);
+      }
+      // 로그인한 사람이면 계정 id와 닉네임을 방에 넘긴다. 클라이언트가 보낸 uid·token 쿼리는 믿지 않고 지운다.
       const params = new URLSearchParams(url.searchParams);
-      const user = await userFromToken(env, params.get("token"));
+      const token = wsProtocols(request).find(p => p.startsWith(WS_AUTH_PREFIX))?.slice(WS_AUTH_PREFIX.length);
+      const user = await userFromToken(env, token);
       params.delete("token"); params.delete("uid");
-      if (user) { params.set("uid", String(user.id)); params.set("name", user.nickname); }
+      params.set("name", user ? user.nickname : cleanNick(params.get("name")) || "익명");
+      if (user) params.set("uid", String(user.id));
       const room = env.ROOM.get(env.ROOM.idFromName(code));
       return room.fetch(new Request("https://room/ws?" + params, request));
     }
@@ -131,6 +142,10 @@ export class Matchmaker {
       const code = (ranked ? "RANK" : "AUTO") + (lang === "en" ? "EN" : "") + randomCode();
       this.rooms.set(code, {auto: true, ranked, lang, phase: "lobby", players: 1, at: now});
       return Response.json({code});
+    }
+
+    if (url.pathname === "/issued") {
+      return new Response(null, {status: this.rooms.get(url.searchParams.get("code"))?.ranked ? 204 : 404});
     }
 
     if (url.pathname === "/stats") {
@@ -180,7 +195,9 @@ export class Room {
     const uid = Number(url.searchParams.get("uid")) || null;   // 로그인 안 했으면 null
     const pair = new WebSocketPair();
     this.accept(pair[1], name, lang, uid);
-    return new Response(null, {status: 101, webSocket: pair[0]});
+    // 클라이언트가 서브프로토콜을 보냈으면 같은 값을 돌려줘야 브라우저가 연결을 받아들인다
+    const headers = wsProtocols(request).includes(WS_PROTOCOL) ? {"Sec-WebSocket-Protocol": WS_PROTOCOL} : {};
+    return new Response(null, {status: 101, webSocket: pair[0], headers});
   }
 
   accept(ws, name, lang, uid) {
@@ -207,7 +224,17 @@ export class Room {
     this.broadcastPlayers();
     this.report();
 
+    let windowAt = 0, count = 0, flooded = false;
     ws.addEventListener("message", e => {
+      if (flooded) return;
+      const now = Date.now();
+      if (now - windowAt >= 1000) { windowAt = now; count = 0; }
+      if (++count > MAX_MSGS_PER_SEC) {
+        // 끊겠다고 보내도 상대가 닫기 응답을 안 할 수 있어서 방에서 바로 뺀다
+        if (count >= FLOOD_KICK_PER_SEC) { flooded = true; this.kick(ws, "메시지를 너무 많이 보냈다"); this.remove(id); }
+        return;
+      }
+      if (typeof e.data !== "string" || e.data.length > MAX_MSG_CHARS) return;
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       this.onMessage(player, msg);
@@ -308,6 +335,7 @@ export class Room {
     this.phase = "starting";
     this.startedWith = this.players.size;   // 코인 계산용: 시작할 때 몇 명이었나
     this.departed = [];
+    this.playStartedAt = 0;   // 지난 판 값이 남으면 3·2·1 중에 끝난 판도 끝까지 한 판으로 친다
     this.broadcast({t: "start", countdown: COUNTDOWN_MS});
     this.report();
     this.startTimer = setTimeout(() => {

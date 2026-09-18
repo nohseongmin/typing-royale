@@ -503,7 +503,7 @@ const $ = s => document.querySelector(s);
 const app = $("#app");
 const rnd = n => Math.floor(Math.random()*n);
 const pick = a => a[rnd(a.length)];
-const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");   // 속성값에도 쓴다
 /* 시크릿 모드·샌드박스 iframe·data: URL에서는 localStorage 접근 자체가 throw한다 */
 const lsGet = (k, d="") => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -927,15 +927,21 @@ const sndLabel = () => SFX.muted ? "소리 끔" : "소리 켬";
    Cloudflare Worker + Durable Object. 방 하나가 DO 인스턴스 하나다.
    ?server=... 로 덮어쓸 수 있어서 로컬 개발 서버나 자체 호스팅도 붙는다. */
 const DEFAULT_SERVER = "https://typing-royale.typing-royale-server.workers.dev";
-const SERVER = new URLSearchParams(location.search).get("server") || DEFAULT_SERVER;
+// 다른 서버 주소는 내 PC에서 띄운 페이지에서만 받는다. 배포된 페이지가 받으면
+// ?server=공격자주소 링크 하나로 로그인 토큰이 그 서버로 간다.
+const LOCAL_PAGE = ["localhost", "127.0.0.1"].includes(location.hostname);
+const SERVER = (LOCAL_PAGE && new URLSearchParams(location.search).get("server")) || DEFAULT_SERVER;
+const WS_PROTOCOL = "tr.v1";   // 서버와 같은 값
 const httpBase = () => SERVER.replace(/^ws/, "http").replace(/\/+$/, "");
 const wsBase   = () => SERVER.replace(/^http/, "ws").replace(/\/+$/, "");
 
 class Net{
   constructor(code, name, handlers){
     this.h = handlers;
-    const token = AUTH.token ? "&token=" + encodeURIComponent(AUTH.token) : "";   // 웹소켓은 헤더를 못 붙여서 쿼리로 보낸다
-    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&lang=${CFG.lang}${token}`);
+    // 로그인 토큰은 주소에 넣지 않고 서브프로토콜 헤더로 보낸다. 주소는 서버 로그에 남는다.
+    const protocols = [WS_PROTOCOL];
+    if (/^[\w-]+$/.test(AUTH.token || "")) protocols.push("auth." + AUTH.token);
+    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&lang=${CFG.lang}`, protocols);
     this.ws.onopen = () => this.h.open && this.h.open();
     this.ws.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -969,8 +975,11 @@ function authFetch(path, opts = {}){
 function takeLoginResult(){
   const h = new URLSearchParams(location.hash.slice(1));
   if (!h.has("session") && !h.has("login_error")) return;
-  if (h.get("session")){ AUTH.token = h.get("session"); lsSet("tr_session", AUTH.token); }
-  if (h.get("login_error")) setTimeout(()=> toast("로그인하지 못했다"), 300);
+  // 내가 누른 로그인에서 돌아온 게 아니면 받지 않는다. 남이 자기 계정 로그인 결과 링크를 보내는 걸 막는다.
+  const nonce = lsGet("tr_login_nonce");
+  lsSet("tr_login_nonce", "");
+  if (h.get("session") && nonce && h.get("n") === nonce){ AUTH.token = h.get("session"); lsSet("tr_session", AUTH.token); }
+  else setTimeout(()=> toast("로그인하지 못했다"), 300);
   history.replaceState(null, "", location.pathname + location.search);
 }
 async function loadAccount(){
@@ -999,7 +1008,12 @@ const accountHtml = () => AUTH.user
   ? `<b>${esc(AUTH.user.nickname)}</b><span class="tier">${esc(AUTH.user.tier || "")} ${AUTH.user.rating}</span><span><span class="coin num">${AUTH.user.coins}</span> 코인</span><button class="linkbtn" id="logout">로그아웃</button>`
   : "";   // 기본은 게스트. 로그인 버튼은 상점 안에 있다
 function wireAccount(){
-  $("#login")?.addEventListener("click", ()=>{ location.href = httpBase() + "/auth/kakao/start"; });
+  $("#login")?.addEventListener("click", ()=>{
+    // 돌아왔을 때 내가 누른 로그인인지 확인할 값. 서버가 # 뒤에 그대로 돌려준다.
+    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+    lsSet("tr_login_nonce", nonce);
+    location.href = httpBase() + "/auth/kakao/start?n=" + nonce;
+  });
   $("#logout")?.addEventListener("click", async ()=>{ await logout(); menu(); });
 }
 
@@ -1356,12 +1370,13 @@ function lobby(code, name, auto, retry = 0){
     <div class="menu">
       <div class="kicker">${ranked ? "랭크전" : auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}</div>
       <div class="lobby" style="margin-top:29px">
+        ${ranked ? "" /* 랭크전은 상대를 고를 수 없게 초대 링크를 안 보여 준다 */ : `
         <div class="code" id="copy" title="눌러서 초대 링크 복사">${esc(code)}</div>
         <div class="field invite">
           <input id="inviteUrl" readonly value="${esc(inviteLink(code))}">
           <button class="btn" id="copyLink">${Date.now() - copiedAt < 1500 ? "복사됨" : "초대 링크 복사"}</button>
         </div>
-        <div class="codehint">링크를 받은 사람은 누르면 닉네임만 정하고 바로 이 방에 들어온다</div>
+        <div class="codehint">링크를 받은 사람은 누르면 닉네임만 정하고 바로 이 방에 들어온다</div>`}
         <div class="slots">
           ${players.map(p=>`<div class="slot"><span class="grow">${esc(p.name)}</span>${!auto && p.id===host?'<span class="host">방장</span>':p.ready?'<span class="ready">준비</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}</div>`).join("")}
           ${Array.from({length: Math.max(0, 2 - players.length)}, ()=>`<div class="slot empty">비어 있음</div>`).join("")}
@@ -1374,9 +1389,9 @@ function lobby(code, name, auto, retry = 0){
         <div class="err" id="err"></div>
       </div>
     </div>`;
-    $("#copy").addEventListener("click", copyInvite);
-    $("#copyLink").addEventListener("click", copyInvite);
-    $("#inviteUrl").addEventListener("focus", e => e.target.select());
+    $("#copy")?.addEventListener("click", copyInvite);
+    $("#copyLink")?.addEventListener("click", copyInvite);
+    $("#inviteUrl")?.addEventListener("focus", e => e.target.select());
     $("#leave").addEventListener("click", ()=>{ stop(); menu("online"); });
     $("#begin")?.addEventListener("click", ()=> net.send({t:"start"}));
     $("#ready")?.addEventListener("click", ()=> net.send({t:"ready", on: !me?.ready}));

@@ -15,16 +15,18 @@ const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const NICK_MAX = 12;
 const REQUIRED = ["KAKAO_REST_KEY", "KAKAO_CLIENT_SECRET", "APP_ORIGIN"];
+const NONCE_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const randomToken = () => b64url(crypto.getRandomValues(new Uint8Array(32)));
 const sha256 = async text => b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))));
 
 /* 태그·제어문자·남은 꺾쇠를 빼고 12자로 자른다. 화면에서도 이스케이프하지만 저장부터 깨끗하게 둔다.
-   꺾쇠만 지우면 "<b>이름</b>"이 "b이름/b"로 남아서 태그째 먼저 지운다. */
+   꺾쇠만 지우면 "<b>이름</b>"이 "b이름/b"로 남아서 태그째 먼저 지운다.
+   글자 방향을 뒤집는 문자와 폭 없는 문자도 뺀다. 남의 닉네임처럼 보이게 꾸미는 데 쓰인다. */
 export const cleanNick = raw => String(raw ?? "")
   .replace(/<[^>]*>/g, "")
-  .replace(/[\u0000-\u001f\u007f<>]/g, "")
+  .replace(/[\u0000-\u001f\u007f<>\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g, "")
   .trim().slice(0, NICK_MAX);
 
 const missingConfig = env => REQUIRED.filter(k => !env[k]);
@@ -56,11 +58,15 @@ export async function handleAuth(request, env, url, json) {
       console.error("kakao login is not configured; missing:", missing.join(", ") || "DB binding");
       return json({error: "카카오 로그인이 아직 설정되지 않았다"}, 503);
     }
+    // n은 로그인 버튼을 누른 브라우저가 만든 값이다. 돌아갈 때 그대로 붙여 주고 브라우저가 대조한다.
+    // 남이 자기 계정으로 받은 콜백 주소를 보내서 그 계정으로 로그인시키는 걸 막는다.
+    const nonce = url.searchParams.get("n") || "";
+    if (!NONCE_RE.test(nonce)) return json({error: "잘못된 로그인 요청이다"}, 400);
     const now = Date.now();
     const state = randomToken();
     await env.DB.batch([
       env.DB.prepare("DELETE FROM oauth_states WHERE created_at < ?").bind(now - STATE_TTL_MS),   // 로그인하다 그만둔 사람 것 정리
-      env.DB.prepare("INSERT INTO oauth_states (state, created_at) VALUES (?, ?)").bind(state, now)
+      env.DB.prepare("INSERT INTO oauth_states (state, created_at, nonce) VALUES (?, ?, ?)").bind(state, now, nonce)
     ]);
     const authorize = new URL("https://kauth.kakao.com/oauth/authorize");
     authorize.search = new URLSearchParams({client_id: env.KAKAO_REST_KEY, redirect_uri: redirectUri, response_type: "code", state});
@@ -74,7 +80,7 @@ export async function handleAuth(request, env, url, json) {
     if (!code || !state) return back({login_error: url.searchParams.get("error") || "cancelled"});
 
     // state는 한 번만 쓰고 10분 지나면 무효. 남이 만든 인가 코드를 우리 콜백에 밀어 넣는 걸 막는다.
-    const saved = await env.DB.prepare("DELETE FROM oauth_states WHERE state = ? RETURNING created_at").bind(state).first();
+    const saved = await env.DB.prepare("DELETE FROM oauth_states WHERE state = ? RETURNING created_at, nonce").bind(state).first();
     if (!saved || Date.now() - saved.created_at > STATE_TTL_MS) return back({login_error: "expired"});
 
     const tokenRes = await fetch("https://kauth.kakao.com/oauth/token", {
@@ -112,7 +118,7 @@ export async function handleAuth(request, env, url, json) {
       env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)").bind(await sha256(session), user.id, now + SESSION_MS)
     ]);
     // 토큰은 ? 가 아니라 # 뒤에 붙인다. # 뒤는 서버 로그와 Referer에 남지 않는다.
-    return back({session});
+    return back({session, n: saved.nonce});
   }
 
   if (url.pathname === "/me") {
