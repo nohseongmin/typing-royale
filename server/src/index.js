@@ -38,7 +38,6 @@ const RESERVE_MS = 10000;       // 빠른 시작 자리 예약 유효 시간. �
 const ADMIT_HOLD_MS = 5000;     // 방이 인원을 보고하기 전까지 방금 들인 연결도 IP별 연결 수에 센다
 const MAX_SOCKETS_PER_IP = 20;  // 서비스 전체에서 IP 하나가 동시에 붙어 있을 수 있는 연결 수
 const MAX_SAME_IP_PUBLIC = 4;   // 빠른 시작·랭크전 방 하나에 같은 IP는 이만큼만(PC방 친구 몇 명은 들어오게)
-const MAX_FIRE_BONUS = 2;       // 불붙음으로 늘어나는 공격 수 상한
 const FAST_MS = 12000;          // 문장을 이보다 빨리 끝내면 한 발 더
 const MAX_LINE = 160;           // 중계하는 문장 길이 상한(신조어가 다 박혀도 이보다 짧다)
 const MAX_DIRTY = 40;
@@ -565,7 +564,7 @@ export class Room {
     }
     if (msg.t === "done" && this.phase === "playing" && p.alive) {
       // 완료는 문장 하나에 한 번이다. 지금 치는 문장을 알려 준 적이 없거나 이미 끝낸 문장이면 무시한다.
-      if (!p.line || p.line === p.doneLine) return;
+      if (!p.line || p.line === p.doneLine || p.prog < 0.999) return;
       const now = Date.now();
       // 판이 시작된 뒤 끝낸 문장들의 타수를 다 더해서 사람 속도 안인지 본다. 렉으로 신고가 몰려 와도 걸리지 않는다.
       if (!withinHumanPace(p.spent + p.lineStrokes, now - this.playStartedAt)) {
@@ -582,7 +581,8 @@ export class Room {
       // 빠르기는 서버 시계로 잰다. 불붙음은 서버가 못 보는 값이라 상한만 둔다.
       const fast = now - p.lastDoneAt < FAST_MS;
       p.lastDoneAt = now;
-      const shots = (fast ? 2 : 1) + Math.max(0, Math.min(MAX_FIRE_BONUS, msg.fire | 0));
+      // 온라인 판정은 클라이언트의 streak/fire 값을 신뢰하지 않는다.
+      const shots = fast ? 2 : 1;
       for (let i = 0; i < shots; i++) this.fire(p);
     }
   }

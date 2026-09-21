@@ -134,3 +134,9 @@ test('rank settlement is internal-only and serialized before reading pair caps',
     assert.equal((await worker.fetch(request(),env)).status,404);
   } finally { env.sql.close(); }
 });
+
+test('server source does not trust client fire bonuses and requires full progress for done', () => {
+  const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+  assert.match(source, /p\.prog < 0\.999/);
+  assert.doesNotMatch(source, /Math\.max\(0, Math\.min\(MAX_FIRE_BONUS/);
+});
