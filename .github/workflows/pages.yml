@@ -1,8 +1,10 @@
 name: Deploy to GitHub Pages
 
+# 예전 주소(github.io)는 새 주소로 넘기는 안내 페이지만 올린다. 게임은 Cloudflare 워커가 내보낸다.
 on:
   push:
     branches: [main]
+    paths: [pages/**, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:
@@ -21,10 +23,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      # 액션은 태그 대신 커밋 해시로 고정한다. 태그는 옮길 수 있어서 남의 코드가 끼어들 수 있다.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          path: .
+          persist-credentials: false
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: pages
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

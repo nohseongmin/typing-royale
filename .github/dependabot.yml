@@ -1,0 +1,11 @@
+# 알려진 취약점(CVE)이 나오면 버전을 올리는 PR을 연다. 서버 배포 도구와 GitHub Actions 둘 다 본다.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

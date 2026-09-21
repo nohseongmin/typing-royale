@@ -2,6 +2,12 @@ name = "typing-royale"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 
+# 게임 화면(public/)도 이 워커가 같은 주소에서 내보낸다.
+# github.io 주소는 다른 GitHub Pages 프로젝트들과 저장소(localStorage)를 같이 써서 로그인 토큰을 읽힐 수 있다.
+# 파일 요청은 워커를 거치지 않고 바로 나가서 요청 한도에도 안 잡힌다. 보안 헤더는 public/_headers.
+[assets]
+directory = "../public"
+
 [[durable_objects.bindings]]
 name = "ROOM"
 class_name = "Room"
@@ -25,5 +31,17 @@ database_name = "typing-royale"
 database_id = "e788aaa3-4ef8-4e70-ae1f-b1c011db5011"
 migrations_dir = "migrations"
 
-[vars]
-APP_ORIGIN = "https://nohseongmin.github.io/typing-royale/"   # 로그인 끝나고 돌아갈 게임 주소
+# IP별 요청 제한. 경로 묶음마다 따로 센다(src/index.js RATE_BUCKETS)
+[[ratelimits]]
+name = "RL"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 60
+  period = 60
+
+# 속도 검사에 걸린 사람 같은 경고를 대시보드에서 볼 수 있게 남긴다
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = false

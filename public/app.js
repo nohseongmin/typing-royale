@@ -1,502 +1,6 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>타자 배틀로얄</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
-<script>
-/* 첫 페인트 전에 테마를 정해 둔다. 늦게 바꾸면 흰 화면이 한 번 번쩍인다 */
-try { document.documentElement.dataset.theme = localStorage.getItem("tr_theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }
-catch (e) { document.documentElement.dataset.theme = "light"; }
-</script>
-<style>
-:root{
-  --bg:#fff; --soft:#f6f7f9; --soft2:#eef0f4; --line:#e8eaee;
-  --ink:#191b1e; --mute:#8b93a1; --dim:#c9ced7;
-  --acc:#10b981; --acc-soft:color-mix(in srgb, var(--acc) 12%, var(--bg));
-  --pink:#ec4899; --pink-soft:#fdeaf4;
-  --red:#ef4444;
-  --no-bg:#fee2e2; --risk-bg:#fff1f2; --out-bg:#fff0f0; --out-ink:#b91c1c;
-  --ok-ink:#0b7a5c; --dmg-ink:#a51f68; --veil:rgba(255,255,255,.88);
-  --toast-bg:#191b1e; --toast-ink:#fff; --shadow:rgba(0,0,0,.16);
-  --fire:#f97316; --fire-soft:rgba(249,115,22,.35);
-  --row:125px;
-}
-:root[data-theme="dark"]{
-  color-scheme:dark;
-  --bg:#0f1115; --soft:#181b22; --soft2:#232833; --line:#2a2f3a;
-  --ink:#e8eaee; --mute:#8b93a1; --dim:#4b5262;
-  --acc-soft:color-mix(in srgb, var(--acc) 16%, var(--bg)); --pink:#f472b6; --pink-soft:#2e1726; --red:#f87171;
-  --no-bg:#3b1a1e; --risk-bg:#2a1418; --out-bg:#2b1719; --out-ink:#fca5a5;
-  --ok-ink:#6ee7b7; --dmg-ink:#f9a8d4; --veil:rgba(15,17,21,.88);
-  --toast-bg:#e8eaee; --toast-ink:#0f1115; --shadow:rgba(0,0,0,.5);
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{
-  background:var(--bg); color:var(--ink); transition:background .35s;
-  font-family:"Pretendard Variable",Pretendard,system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
-  font-size:19px; display:flex; align-items:center; justify-content:center; padding:31px;
-  -webkit-font-smoothing:antialiased;
-}
-#app{width:100%;max-width:1404px}
-body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 */
-.num{font-variant-numeric:tabular-nums}
-
-/* ================= menu ================= */
-.menu{text-align:center;padding:31px 10px}
-.kicker{font-size:14px;letter-spacing:3px;color:var(--mute);font-weight:700}
-.logo{font-size:60px;font-weight:800;letter-spacing:-1.5px;margin-top:13px}
-.logo em{font-style:normal;color:var(--acc)}
-.sub{color:var(--mute);margin-top:16px;font-size:18px}
-.opts{display:flex;gap:42px;justify-content:center;flex-wrap:wrap;margin:44px 0 34px}
-.opt h4{font-size:14px;color:var(--mute);letter-spacing:2px;margin-bottom:12px;font-weight:700;text-align:left}
-.seg{display:flex;gap:8px}
-.seg button{
-  background:var(--soft);color:var(--mute);border:1px solid transparent;border-radius:1299px;
-  padding:12px 23px;font:inherit;font-size:18px;font-weight:600;cursor:pointer;transition:.15s
-}
-.seg button.on{background:var(--acc);color:#fff}
-.seg button:hover:not(.on){background:var(--soft2);color:var(--ink)}
-.btn{
-  background:var(--acc);color:#fff;border:0;border-radius:1299px;padding:20px 60px;
-  font:inherit;font-size:21px;font-weight:700;cursor:pointer;transition:.15s;
-  box-shadow:0 8px 23px color-mix(in srgb, var(--acc) 28%, transparent)
-}
-.btn:hover{transform:translateY(-1px)}
-.btn.ghost{background:var(--soft);color:var(--mute);box-shadow:none;font-size:20px;padding:18px 39px}
-.btn.ghost[disabled]{opacity:.6;cursor:not-allowed;transform:none}
-.btn[disabled]{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
-.lobby{max-width:598px;margin:0 auto;text-align:left}
-.lobby h3{font-size:17px;color:var(--mute);letter-spacing:2px;font-weight:700;margin-bottom:13px;text-align:center}
-.code{
-  font-size:49px;font-weight:800;letter-spacing:8px;text-align:center;
-  background:var(--soft);border-radius:21px;padding:23px;margin-bottom:8px;cursor:pointer
-}
-.code:hover{background:var(--soft2)}
-.codehint{text-align:center;font-size:15px;color:var(--mute);margin-bottom:23px}
-.slots{display:flex;flex-direction:column;gap:8px;margin-bottom:23px}
-.slot{display:flex;align-items:center;gap:10px;background:var(--soft);border-radius:16px;padding:14px 18px;font-size:18px;font-weight:600}
-.slot.empty{background:none;border:1px dashed var(--line);color:var(--dim);font-weight:500}
-.slot .me{font-size:13px;font-weight:800;color:#fff;background:var(--acc);padding:2px 9px;border-radius:1299px}
-.wait{text-align:center;color:var(--mute);font-size:17px;margin-bottom:23px}
-.wait b{color:var(--ink);font-variant-numeric:tabular-nums}
-.field{display:flex;gap:10px;margin-bottom:13px}
-.field input{
-  flex:1;background:var(--soft);border:1px solid transparent;border-radius:1299px;
-  padding:16px 23px;font:inherit;font-size:18px;color:var(--ink);outline:none;min-width:0
-}
-.field input:focus{border-color:var(--acc);background:var(--bg)}
-.field input::placeholder{color:var(--dim)}
-.field .btn{padding:16px 31px;font-size:18px;white-space:nowrap}
-.err{color:var(--red);font-size:16px;text-align:center;min-height:23px;margin-top:10px}
-.modebar{display:flex;gap:18px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:34px}
-.snd{background:var(--soft);color:var(--mute);border:0;border-radius:1299px;padding:12px 18px;font:inherit;font-size:16px;font-weight:600;cursor:pointer}
-.snd:hover{background:var(--soft2);color:var(--ink)}
-.cards{
-  margin-top:47px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;text-align:left
-}
-.card{background:var(--soft);border-radius:18px;padding:21px 23px}
-.card b{display:block;font-size:17px;margin-bottom:8px}
-.card p{font-size:16px;color:var(--mute);line-height:1.65}
-.card .ex{margin-top:10px;font-size:16px;color:var(--pink);font-weight:600}
-
-/* ================= hud ================= */
-.hud{display:flex;align-items:center;gap:18px;margin-bottom:23px}
-.hud .tick{flex:1;height:5px;background:var(--soft2);border-radius:1299px;overflow:hidden}
-.hud .tick i{display:block;height:100%;background:var(--acc);transition:width .1s linear}
-.hud.danger .tick i{background:var(--red)}
-.stat{display:flex;align-items:baseline;gap:5px}
-.stat b{font-size:25px;font-weight:800}
-.stat u{font-size:14px;color:var(--mute);text-decoration:none}
-.stat+.stat{margin-left:18px}
-.hud .tleft{font-size:16px;color:var(--mute);white-space:nowrap}
-.hud.danger .tleft{color:var(--red);font-weight:700}
-
-/* ================= stage ================= */
-.stage{display:grid;grid-template-columns:minmax(0,1fr) 307px;gap:21px;align-items:start}
-.board{
-  background:var(--bg);border:1px solid var(--line);border-radius:26px;
-  padding:10px 29px 23px;position:relative;overflow:hidden
-}
-.board::before{
-  content:"";position:absolute;left:13px;right:13px;top:calc(10px + var(--row));height:var(--row);
-  background:var(--soft);border-radius:18px;z-index:0
-}
-/* 피격 연출: 화면 전체가 흔들리고 보드 테두리가 핑크로 번쩍인다 */
-.board::after{
-  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:4;
-  box-shadow:inset 0 0 0 0 transparent;transition:box-shadow .5s
-}
-.board.flash::after{box-shadow:inset 0 0 0 3px var(--pink),inset 0 0 91px rgba(236,72,153,.28);transition:none}
-#app.jolt{animation:jolt .38s cubic-bezier(.36,.07,.19,.97)}
-#app.jolt-big{animation:jolt-big .52s cubic-bezier(.36,.07,.19,.97)}
-@keyframes jolt{
-  10%,90%{transform:translate(-2px,1px)} 20%,80%{transform:translate(5px,-2px)}
-  30%,50%,70%{transform:translate(-9px,2px)} 40%,60%{transform:translate(9px,-2px)}
-}
-@keyframes jolt-big{
-  10%,90%{transform:translate(-5px,2px) rotate(-.3deg)} 20%,80%{transform:translate(10px,-3px) rotate(.4deg)}
-  30%,50%,70%{transform:translate(-17px,5px) rotate(-.6deg)} 40%,60%{transform:translate(17px,-5px) rotate(.6deg)}
-}
-@media (prefers-reduced-motion: reduce){ #app.jolt,#app.jolt-big,.foe.smash,.board.recoil,.board.fire2{animation:none} }
-.rail{position:relative;height:calc(var(--row)*3);overflow:hidden;z-index:1}
-.track{transform:translateY(calc(var(--row) * -1))}
-.track.go{transition:transform .42s cubic-bezier(.22,1,.36,1)}
-.row{height:var(--row);display:flex;align-items:center;justify-content:center;padding:0 8px}
-.fit{display:inline-block;white-space:nowrap;transform-origin:center center;font-size:40px;font-weight:600;letter-spacing:.5px}
-.row.past{opacity:0}
-.row.next{opacity:.45}
-.row.shake{animation:sk .22s}
-@keyframes sk{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
-
-.ch{color:var(--dim);transition:color .08s;position:relative;padding-bottom:9px;white-space:pre}
-.ch.tail:empty{display:none}
-.ch.dt{color:var(--pink);opacity:.6}
-.ch.ok{color:var(--ink);opacity:1}
-.ch.comp{color:var(--acc);opacity:1}
-.ch.no{color:var(--red);opacity:1;background:var(--no-bg);border-radius:3px}
-/* 틀린 자리 위에 원래 글자를 흐릿하게 남긴다 */
-.ch[data-t]:not([data-t=""])::before{
-  content:attr(data-t);position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
-  font-size:.52em;line-height:1;color:var(--mute);opacity:.85;font-weight:600;pointer-events:none;margin-bottom:2px
-}
-.ch.cur::after{
-  content:"";position:absolute;left:6%;right:6%;bottom:0;height:3px;
-  background:var(--acc);border-radius:2px;animation:cb 1s steps(2) infinite
-}
-@keyframes cb{50%{opacity:0}}
-.row.next .ch.dt{opacity:1;font-weight:800}
-
-#type{position:absolute;opacity:0;left:-12999px}
-.hint{text-align:center;font-size:16px;color:var(--mute);height:23px;margin-top:2px}
-.hint b{color:var(--pink)}
-.blur{
-  position:absolute;inset:0;background:var(--veil);z-index:5;
-  display:none;align-items:center;justify-content:center;font-size:18px;color:var(--mute);cursor:pointer
-}
-.blur.on{display:flex}
-
-/* ================= foes ================= */
-.foes{display:flex;flex-direction:column;gap:10px}
-.foe{background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:16px 17px;cursor:pointer;transition:.15s}
-.foe:hover{background:var(--soft)}
-.foe.target{border-color:var(--pink);background:var(--pink-soft)}
-.foe.dead{opacity:.4}
-.foe.hit{animation:fl .5s}
-@keyframes fl{0%,100%{background:transparent}30%{background:var(--pink-soft)}}
-.foe .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.foe .rk{font-size:13px;font-weight:800;color:var(--mute);background:var(--soft2);padding:2px 8px;border-radius:1299px}
-.foe .nm{font-size:17px;font-weight:700;flex:1}
-.foe .dn{font-size:15px;color:var(--mute)}
-.pbar{height:5px;background:var(--soft2);border-radius:1299px;overflow:hidden}
-.pbar i{display:block;height:100%;background:var(--acc);transition:width .12s linear}
-.foe .meta{display:flex;justify-content:space-between;margin-top:9px;font-size:14px;color:var(--mute)}
-.foe .load{color:var(--pink);font-weight:800}
-.aim{font-size:14px;color:var(--mute);text-align:center;padding:8px}
-
-.feed{margin-top:13px;display:flex;flex-direction:column-reverse;gap:5px;height:156px;overflow:hidden}
-.ev{font-size:15px;color:var(--mute);padding:6px 13px;background:var(--soft);border-radius:10px;animation:sl .2s}
-.ev.me{background:var(--acc-soft);color:var(--ok-ink)}
-.ev.dmg{background:var(--pink-soft);color:var(--dmg-ink);font-weight:600}
-.ev.out{background:var(--out-bg);color:var(--out-ink);font-weight:700}
-@keyframes sl{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
-
-#toast{position:fixed;bottom:29px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column-reverse;gap:9px;align-items:center;pointer-events:none;z-index:60}
-.tst{background:var(--toast-bg);color:var(--toast-ink);padding:12px 26px;border-radius:1299px;font-size:17px;font-weight:700;animation:pp .25s;box-shadow:0 10px 26px var(--shadow)}
-.tst.atk{background:var(--pink)}
-.tst.good{background:var(--acc)}
-@keyframes pp{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
-
-/* ================= over ================= */
-.over{text-align:center;padding:65px 26px}
-.over .big{font-size:68px;font-weight:800;letter-spacing:-2px}
-.over .big.win{color:var(--acc)}
-.over p{color:var(--mute);margin-top:13px}
-.final{display:flex;gap:18px;justify-content:center;margin:42px 0}
-.final .card{background:var(--soft);border-radius:18px;padding:21px 34px;text-align:center}
-.final .card b{font-size:34px;font-weight:800;display:block}
-.final .card u{font-size:14px;color:var(--mute);text-decoration:none}
-/* ================= 추가 UI ================= */
-.online{margin-top:13px;font-size:16px;color:var(--mute);min-height:23px}
-.online b{color:var(--acc)}
-.invite input{font-size:16px;color:var(--mute)}
-.slot .host{font-size:13px;font-weight:800;color:var(--ink);background:var(--soft2);padding:2px 9px;border-radius:1299px}
-.aimpill{font-size:16px;color:var(--mute);white-space:nowrap}
-.aimpill b{color:var(--pink)}
-.hud.fire1 .stat.streak b,.hud.fire2 .stat.streak b{color:var(--fire)}
-.board.fire1{border-color:var(--fire);box-shadow:0 0 0 1px var(--fire),0 0 34px var(--fire-soft)}
-.board.fire2{border-color:var(--fire);animation:blaze 1.1s ease-in-out infinite}
-@keyframes blaze{0%,100%{box-shadow:0 0 0 2px var(--fire),0 0 39px var(--fire-soft)}50%{box-shadow:0 0 0 2px var(--fire),0 0 73px var(--fire)}}
-.tst.fire{background:var(--fire);color:#fff}
-
-/* 공격 연출: 공격 이름을 단 불덩이가 내 보드에서 상대 카드로 날아가 터진다 */
-.orb{position:fixed;z-index:70;pointer-events:none;padding:9px 18px;border-radius:1299px;white-space:nowrap;
-  font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#f9a8d4,#ec4899 55%,#be185d);
-  box-shadow:0 0 0 5px rgba(236,72,153,.25),0 0 36px 8px rgba(236,72,153,.55)}
-.orb.fire{background:linear-gradient(135deg,#fdba74,#f97316 55%,#c2410c);box-shadow:0 0 0 5px rgba(249,115,22,.25),0 0 39px 10px rgba(249,115,22,.6)}
-.spark{position:fixed;z-index:70;width:10px;height:10px;border-radius:50%;background:var(--pink);box-shadow:0 0 13px var(--pink);pointer-events:none}
-.spark.fire{background:var(--fire);box-shadow:0 0 13px var(--fire)}
-.foe.smash{animation:smash .45s}
-@keyframes smash{
-  0%{transform:none} 18%{transform:scale(1.06) rotate(-2deg);border-color:var(--pink);background:var(--pink-soft)}
-  38%{transform:translateX(-10px) rotate(1.5deg)} 58%{transform:translateX(8px)} 78%{transform:translateX(-3px)} 100%{transform:none}
-}
-.board.recoil{animation:recoil .22s}
-@keyframes recoil{35%{transform:scale(.985)}}
-/* 상대가 지금 치는 문장 */
-.foe .mini{margin-top:9px;font-size:16px;line-height:1.45;white-space:pre;overflow:hidden;color:var(--dim);height:24px}
-.mini .mok,.wline .mok{color:var(--ink)}
-.mini .mno,.wline .mno{color:var(--red);background:var(--no-bg);border-radius:3px}
-.mini .mcur{box-shadow:inset 0 -2px 0 var(--acc)}
-.mini .mdt,.wline .mdt{color:var(--pink)}
-/* 관전 */
-.watchhead{text-align:center;color:var(--mute);font-size:16px;margin:5px 0 18px}
-.watchhead b{color:var(--ink)}
-.watch{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:13px}
-.wcard{background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:18px 21px}
-.wcard.dead{opacity:.4}
-.wcard .top{display:flex;align-items:center;gap:9px;margin-bottom:10px}
-.wcard .rk{font-size:13px;font-weight:800;color:var(--mute);background:var(--soft2);padding:3px 9px;border-radius:999px}
-.wcard .nm{font-size:18px;font-weight:700;flex:1}
-.wcard .dn{font-size:14px;color:var(--mute)}
-.wline{font-size:23px;line-height:1.55;white-space:pre-wrap;word-break:keep-all;color:var(--dim);min-height:72px;margin-bottom:10px}
-.wline .mcur{box-shadow:inset 0 -3px 0 var(--acc)}
-/* 결과 순위표 */
-.standings{max-width:520px;margin:0 auto 29px;display:flex;flex-direction:column;gap:7px;text-align:left}
-.srow{display:flex;align-items:center;gap:13px;background:var(--soft);border-radius:14px;padding:12px 18px;font-size:17px}
-.srow b{min-width:52px;font-weight:800}
-.srow span{flex:1;font-weight:600}
-.srow u{text-decoration:none;color:var(--mute);font-size:14px}
-.srow.me{background:var(--acc-soft)}
-.srow.first b{color:var(--acc)}
-/* 시작 카운트다운 */
-.count{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;font-size:130px;font-weight:800;color:var(--acc);background:var(--veil)}
-.count:empty{display:none}
-/* 로비 준비 */
-.slot .grow{flex:1}
-.slot .ready{font-size:13px;font-weight:800;color:var(--ok-ink);background:var(--acc-soft);padding:3px 9px;border-radius:999px}
-/* 계정 */
-.account{margin-top:8px;font-size:15px;color:var(--mute);min-height:34px;display:flex;gap:10px;justify-content:center;align-items:center}
-.account b{color:var(--ink)}
-.account .coin{color:#d97706;font-weight:800}
-.kakao{background:#FEE500;color:rgba(0,0,0,.85);border:0;border-radius:12px;padding:10px 20px;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
-.linkbtn{background:none;border:0;color:var(--mute);font:inherit;font-size:15px;text-decoration:underline;cursor:pointer;padding:0}
-/* 상점 */
-.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:13px;margin-top:23px;text-align:left}
-.item{background:var(--soft);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:10px;border:2px solid transparent}
-.item.on{border-color:var(--acc)}
-.item b{font-size:18px}
-.item u{text-decoration:none;color:var(--mute);font-size:14px}
-.item .pv{min-height:44px}
-.item div.pv{font-size:22px;display:flex;align-items:center}
-.item .btn{padding:12px 16px;font-size:16px}
-.swatch{gap:8px}
-.swatch i{width:34px;height:34px;border-radius:50%;background:var(--sw)}
-.swatch i:nth-child(2){opacity:.55}
-.swatch i:nth-child(3){opacity:.2}
-.coin{color:#d97706}
-.reward{margin-top:10px;font-size:22px;font-weight:800;color:#d97706;min-height:30px}
-/* 글꼴 스킨은 치는 문장에만 입힌다. 메뉴·숫자까지 바뀌면 읽기 힘들다. */
-.fit,.wline,.foe .mini{font-family:var(--type-font, inherit)}
-/* 랭크전 */
-.btn.rankbtn{background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 8px 23px rgba(239,68,68,.25)}
-.tier{font-size:13px;font-weight:800;color:#b45309;background:color-mix(in srgb, #f59e0b 18%, var(--bg));padding:3px 10px;border-radius:999px}
-.rating{margin-top:6px;font-size:18px;color:var(--mute);min-height:26px}
-.rating b{color:var(--ink)}
-@media(max-width:1066px){.stage{grid-template-columns:1fr}:root{--row:99px}.fit{font-size:30px}}
-</style>
-</head>
-<body>
-<div id="app"></div>
-<div id="toast"></div>
-
-<script>
 "use strict";
 
-/* ===================== 문장 풀 ===================== */
-/* [신조어]단어 는 "그 단어 앞에 이 신조어를 끼워 넣을 수 있다"는 표시다. [a|b] 는 둘 중 하나.
-   품사만 보고 자동으로 넣으면 "샤갈 세상에서"처럼 말이 안 되는 조합이 나와서,
-   끼워 넣어도 말이 되고 웃긴 자리를 문장마다 직접 골랐다. */
-const SENTENCES = [
-  "떠나갈 때가 언제인가를 [무지성으로]분명히 알고 가는 이의 [밤티]뒷모습은 [개|준내]아름답다",
-  "바람이 [개|준내]부는 날에는 [밤티]창문을 열고 하늘을 오래 [무지성으로]바라보았다",
-  "작은 일에도 최선을 [무지성으로]다하는 사람이 결국 [개|준내]큰 일을 해낸다",
-  "오늘 걷지 않으면 내일은 [무지성으로]뛰어야 한다는 [국룰]말을 기억하자",
-  "책을 [무지성으로]읽는 [갓생]시간은 세상에서 가장 [개|준내]조용한 [밤티]여행이 된다",
-  "한 걸음씩 [무지성으로]나아가다 보면 어느새 [밤티]정상에 닿아 있다",
-  "밤하늘의 [밤티]별은 언제나 그 자리에서 우리를 [무지성으로]기다린다",
-  "실패는 성공으로 가는 [밤티]길에 놓인 [개|준내]작은 돌다리일 뿐이다",
-  "가장 [개|준내]어두운 밤이 지나야 가장 밝은 [갓생]아침이 찾아온다",
-  "노력은 배신하지 않는다는 [국룰]말을 나는 아직도 [무지성으로]믿는다",
-  "커피 한 잔의 [갓생]여유가 하루의 피로를 [개|준내]씻어 주기도 한다",
-  "봄이 오면 얼었던 [밤티]강물도 소리를 내며 [무지성으로]흐르기 시작한다",
-  "사람의 마음을 [무지성으로]얻는 일이 세상에서 가장 [개|준내]어려운 일이다",
-  "좋은 [갓생]습관 하나가 인생의 방향을 완전히 [무지성으로]바꾸어 놓는다",
-  "여름 소나기가 [무지성으로]지나간 자리에 [밤티]무지개가 걸리기도 한다",
-  "손끝에서 만들어진 [밤티]문장이 생각보다 [개|준내]멀리 퍼져 나간다",
-  "천천히 [무지성으로]가더라도 [무지성으로]멈추지 않으면 결국 도착하게 된다",
-  "낡은 [밤티]골목길에도 저마다의 이야기가 조용히 [개|준내]쌓여 있다",
-  "겨울이 [개|준내]길수록 봄을 [무지성으로]기다리는 마음은 더욱 간절해진다",
-  "누구에게나 처음은 [개|준내]서툴고 그래서 더 아름다운 [국룰]법이다",
-  "새벽에 [무지성으로]일어나 마시는 물 한 잔이 [갓생]하루를 깨워 준다",
-  "기록하지 않은 [밤티]기억은 시간이 지나면 [개|준내]흐려지기 마련이다",
-  "산은 언제나 그 자리에 있지만 오르는 [밤티]길은 매번 [개|준내]다르다",
-  "친구의 말 한마디가 무너진 [밤티]하루를 다시 [무지성으로]세워 주었다",
-  "빠른 손보다 [개|준내]정확한 손이 결국 더 멀리 [무지성으로]나아가게 된다",
-  "계절이 [무지성으로]바뀌는 것을 느끼는 순간 나도 조금 [개|준내]자라 있었다",
-  "어제의 [밤티]나보다 조금 더 나은 [갓생]오늘을 [무지성으로]살아가면 충분하다",
-  "생각을 글로 [무지성으로]옮기는 순간 흐릿하던 것들이 [개|준내]또렷해진다",
-  "길을 [무지성으로]잃어 본 사람만이 새로운 [밤티]길을 찾아낼 수 있다",
-  "지금 이 순간에 [무지성으로]집중하는 것이 가장 [개|준내]확실한 [국룰]방법이다",
-  "비 온 뒤에 땅이 굳듯이 [개|준내]힘든 날도 [갓생]경험이 된다",
-  "따뜻한 [밤티]밥 한 끼가 지친 마음을 [개|준내]든든하게 채운다",
-  "급할수록 돌아가라는 [국룰]말에는 [개|준내]깊은 뜻이 담겨 있다",
-  "작은 불씨 하나가 [무지성으로]번져 온 산을 [개|준내]붉게 물들인다",
-  "아침마다 [무지성으로]정리한 [밤티]책상이 [갓생]하루의 시작이 된다",
-  "늦었다고 생각할 때가 가장 [개|준내]빠른 때라는 [국룰]말이 있다",
-  "바쁜 하루 끝에 마시는 [밤티]커피 한 잔이 [개|준내]달콤하다",
-  "좋아하는 노래를 [무지성으로]흥얼거리면 기분이 [개|준내]좋아진다",
-  "창밖으로 보이는 [밤티]풍경도 계절마다 [개|준내]새롭게 느껴진다",
-  "시험 전날 밤에는 [무지성으로]외운 [밤티]공식도 [개|준내]소중하다",
-  "주말 아침에 늦잠을 [무지성으로]자는 것은 [개|준내]작은 [국룰]사치다",
-  "오랜만에 만난 친구와 [무지성으로]웃다 보면 시간이 [개|준내]빨리 간다",
-  "계획대로 되지 않는 날에도 [갓생]일기는 [무지성으로]쓰는 편이다",
-  "버스를 놓친 덕분에 [밤티]골목에서 [개|준내]맛있는 빵집을 찾았다",
-  "오늘 할 일을 [무지성으로]미루면 내일의 내가 [개|준내]힘들어진다",
-  "잘 자고 잘 먹는 것이 [갓생]건강의 [국룰]기본이다",
-  "낯선 도시를 [무지성으로]걷다 보면 뜻밖의 [밤티]풍경을 만난다",
-  "마감이 다가올수록 [갓생]집중력은 [개|준내]놀랍게 올라간다",
-  "비 오는 날 [밤티]창가에 앉아 [무지성으로]빗소리를 듣는다",
-  "처음 타 본 [밤티]자전거는 [개|준내]무서웠지만 금방 익숙해졌다",
-  "운동을 [무지성으로]시작한 지 한 달 만에 몸이 [개|준내]가벼워졌다",
-  "정성껏 차린 [밤티]저녁상에 가족들이 [개|준내]행복하게 웃었다",
-  "서두르지 않고 한 단계씩 [무지성으로]밟는 것이 [국룰]순서다",
-  "잃어버린 [밤티]우산은 꼭 [무지성으로]포기할 때쯤 [개|준내]엉뚱한 곳에서 나타난다",
-  "시끄러운 [밤티]알람을 끄고 [무지성으로]다시 잠드는 것은 [국룰]실수다",
-  "좋은 친구는 [개|준내]힘들 때 [무지성으로]달려와 준다",
-  "김이 모락모락 나는 [밤티]라면 한 그릇이 [개|준내]든든한 위로가 된다",
-  "새 [밤티]신발을 신은 날은 괜히 [개|준내]멀리 [무지성으로]걷고 싶어진다",
-  "도서관의 [개|준내]조용한 공기가 졸음을 [무지성으로]부른다",
-  "편의점 앞 의자에 앉아 먹는 [밤티]아이스크림이 [개|준내]맛있다",
-  "청소를 [무지성으로]미루다 보면 방이 [개|준내]금방 어질러진다",
-  "오래된 사진첩을 넘기면 [밤티]추억이 [개|준내]선명하게 떠오른다",
-  "매일 조금씩 [무지성으로]쌓은 [갓생]습관이 [개|준내]큰 차이를 만든다",
-  "모르는 길은 [무지성으로]헤매지 말고 물어보는 게 [국룰]지름길이다",
-  "긴 겨울이 끝나고 [개|준내]따뜻한 햇살이 [무지성으로]쏟아진다",
-  "친구와 나눠 먹는 [밤티]떡볶이가 [개|준내]더 맛있다",
-  "발표 전에는 [개|준내]떨리지만 막상 시작하면 [무지성으로]말이 나온다",
-  "고양이는 햇볕 드는 [밤티]자리를 [개|준내]귀신같이 찾아낸다",
-  "새로 산 [밤티]화분에 물을 주며 [갓생]아침을 연다",
-  "장바구니에 담아 둔 물건은 [무지성으로]결제하기 전에 [개|준내]한 번 더 고민한다",
-  "선풍기 바람 앞에서 [무지성으로]노래를 부르면 목소리가 [개|준내]웃기게 떨린다",
-  "지하철에서 [무지성으로]졸다가 내릴 역을 [개|준내]허무하게 지나쳤다",
-  "비싼 [밤티]운동화보다 발에 맞는 신발이 [개|준내]오래 간다",
-  "해가 지는 [밤티]강가를 [무지성으로]달리면 [개|준내]상쾌해진다",
-  "정리 정돈의 [국룰]첫걸음은 [무지성으로]버리는 것이다",
-  "퇴근길 하늘이 [개|준내]예쁘면 괜히 [무지성으로]사진을 찍게 된다",
-  "밤새 내린 눈이 [밤티]마을을 [개|준내]하얗게 덮었다",
-  "처음 [무지성으로]요리한 [밤티]계란말이가 [개|준내]그럴듯하게 나왔다",
-  "좋은 질문 하나가 [개|준내]막힌 생각을 [무지성으로]풀어 준다",
-  "약속 시간에 [개|준내]일찍 도착하는 것이 [국룰]예의다",
-  "월요일 [갓생]아침의 [밤티]커피는 [개|준내]쓰게 느껴진다",
-  "비밀번호는 [무지성으로]정하면 [개|준내]금방 까먹는다",
-  "동네 [밤티]분식집 사장님은 손이 [개|준내]크시다",
-  "쉬는 날에는 [무지성으로]누워서 [갓생]영상을 몰아 본다",
-  "여행 [밤티]가방은 쌀 때마다 [개|준내]무거워진다",
-  "첫눈이 오는 날에는 [개|준내]설레서 [무지성으로]밖으로 뛰어나간다",
-  "정답을 모를 때는 [무지성으로]찍기보다 [개|준내]차분히 다시 읽어 본다",
-  "산책하는 강아지의 [밤티]꼬리가 [개|준내]신나게 흔들린다",
-  "오래 쓴 [밤티]이어폰은 한쪽만 [개|준내]작게 들린다",
-  "휴대폰 배터리는 꼭 [개|준내]중요할 때 [무지성으로]꺼진다",
-  "배고플 때 장을 보면 [무지성으로]과자를 [개|준내]많이 담게 된다",
-  "새벽 감성으로 [무지성으로]쓴 [밤티]문자는 [개|준내]부끄럽다",
-  "오늘의 [갓생]목표는 [무지성으로]일찍 자는 것이다",
-  "친구가 추천한 [밤티]영화가 [개|준내]재밌어서 놀랐다",
-  "잠들기 전에 [무지성으로]핸드폰을 보면 눈이 [개|준내]말똥말똥해진다",
-  "방학 [갓생]계획표는 [개|준내]완벽하지만 [무지성으로]지키지 못한다",
-  "비 오는 날 [밤티]우비를 입고 [무지성으로]웅덩이를 밟았다",
-  "줄 서서 먹는 [밤티]맛집은 기다린 만큼 [개|준내]맛있어야 한다",
-  "오랜만에 방 청소를 하면 [밤티]물건이 [무지성으로]쏟아져 나온다",
-  "끝까지 포기하지 않는 마음이 [개|준내]멋진 [국룰]결말을 만든다"
-];
-
-const SENTENCES_EN = [
-  "The [sus]quiet river [lowkey]runs through the [cursed]old town",
-  "Every [goated]small step [lowkey]brings you closer to the top",
-  "She opened the [cursed]window and [lowkey]watched the rain fall",
-  "Good [goated]habits slowly change the shape of your [mid]life",
-  "The [delulu]stars [lowkey]wait for us in the same place every [unhinged]night",
-  "A warm cup of [bussin]coffee can [literally]save a long day",
-  "He wrote a [cringe]short letter to his [goated]best friend",
-  "The morning light [lowkey]spilled across the [crusty]kitchen floor",
-  "Our [sweaty]team finished the [mid]project just before midnight",
-  "The [chonky]cat [lowkey]slept on the warm edge of the bed",
-  "Fast [sweaty]hands matter less than [npc]careful hands",
-  "They walked along the [aesthetic]beach until the sun [lowkey]went down",
-  "This [cursed]old road leads to a small [sus]village by the sea",
-  "The wind [lowkey]carried the smell of [bussin]fresh bread",
-  "Reading a [goated]good book [lowkey]feels like a quiet journey",
-  "The [feral]children laughed as the [cursed]snow covered the yard",
-  "My [goated]brother [lowkey]fixed the [cursed]broken bike in one afternoon",
-  "The city [lowkey]looks different when the [aesthetic]lights come on",
-  "Every [cringe]mistake [literally]teaches you something new",
-  "The [goated]train [literally]left the station right on time",
-  "Her voice filled the [sus]empty hall with [bussin]music",
-  "The [basic]leaves [lowkey]turned red and gold in early autumn",
-  "We planted a [sus]tree in the corner of the [aesthetic]garden",
-  "The [cursed]old clock on the wall [lowkey]stopped at noon",
-  "Keep going even when the [mid]road [lowkey]feels long",
-  "The [goated]baker opens his [bussin]shop before the sun rises",
-  "A single [unhinged]idea can [literally]change the whole world",
-  "The [clingy]dog waited by the door for its [npc]owner",
-  "Clear [delulu]goals make [sweaty]hard work feel lighter",
-  "The mountain [lowkey]looked calm under the [moody]gray sky",
-  "My [chonky]hamster [literally]runs on its wheel all night",
-  "The [crusty]pizza from last night [lowkey]tastes better today",
-  "The [feral]dog next door [literally]barks at every leaf",
-  "She [lowkey]practiced her [cringe]speech in front of the mirror",
-  "The [sus]vending machine [literally]ate my last coin",
-  "My [goated]grandmother [lowkey]beats everyone at card games",
-  "The [moody]printer [literally]refuses to work on Mondays",
-  "We [lowkey]stayed up all night watching [cursed]videos",
-  "His [basic]playlist [lowkey]slaps on long drives",
-  "The [clingy]puppy followed me into every [aesthetic]room",
-  "The [sweaty]gym smelled like old socks and [delulu]dreams",
-  "My [npc]coworker [literally]says good morning at noon",
-  "The [unhinged]seagull [literally]stole my sandwich at the beach",
-  "I [lowkey]bought another [cursed]plant I cannot keep alive",
-  "The [mid]movie had a [goated]soundtrack",
-  "Our [chonky]cat [lowkey]judges us from the top of the fridge",
-  "The [crusty]old laptop [literally]sounds like a jet engine",
-  "My [delulu]plan was to [lowkey]wake up at five every day",
-  "The [bussin]tacos at that [sus]food truck sold out fast",
-  "He [lowkey]cried at the ending of the [cringe]movie",
-  "The [feral]kids at the party [literally]ate all the cake",
-  "Her [aesthetic]notebook is too pretty to [lowkey]write in",
-  "The [cursed]group chat [literally]exploded at midnight",
-  "My [basic]morning routine is coffee and [unhinged]scrolling",
-  "The [goated]teacher [lowkey]canceled the test",
-  "Our [sweaty]soccer team [literally]lost by ten goals",
-  "The [clingy]fog [lowkey]followed us all the way home",
-  "This [mid]sandwich [literally]costs more than my lunch money",
-  "The [moody]weather [lowkey]changed three times today",
-  "Every [npc]character in the game [literally]says the same line"
-];
-
-/* "[준내]달려간다" 표시를 떼어 내고 {text, slots:[{before, word}]} 로 푼다 */
-function parseLine(raw){
-  const words = [], slots = [];
-  for (const tok of raw.split(" ")){
-    const m = tok.match(/^\[([^\]]+)\](.+)$/);
-    const word = m ? m[2] : tok;
-    if (m) for (const w of m[1].split("|")) slots.push({before: word, word: w});
-    words.push(word);
-  }
-  return {text: words.join(" "), slots};
-}
-const POOL_KO = SENTENCES.map(parseLine), POOL_EN = SENTENCES_EN.map(parseLine);
+const POOL_KO = TR_POOL.ko, POOL_EN = TR_POOL.en;   // pool.js
 
 /* ===================== 유틸 ===================== */
 const $ = s => document.querySelector(s);
@@ -798,12 +302,18 @@ function fireFx(toId, kind){
 }
 
 /* Tab으로 공격 대상을 돌린다. 자동 → 상대들 → 다시 자동 */
+/* Tab을 꾹 누르면 초당 수십 번 바뀐다. 서버는 초당 메시지 수를 제한해서, 마지막 값만 조금 늦게 보낸다. */
+const AIM_SEND_MS = 120;
+function sendAim(){
+  if (!G.online || sendAim.pending) return;
+  sendAim.pending = setTimeout(()=>{ sendAim.pending = null; if (G?.online) G.net.send({t:"aim", id:G.target}); }, AIM_SEND_MS);
+}
 function cycleTarget(dir){
   // 순위순으로 돌리면 누르는 사이 순위가 바뀌어 건너뛰거나 되돌아간다. 입장 순서로 고정한다.
   const order = [null, ...G.players.filter(p => p !== G.me && p.alive).map(p => p.id)];
   const i = Math.max(0, order.indexOf(G.target));
   G.target = order[(i + dir + order.length) % order.length];
-  if (G.online) G.net.send({t:"aim", id:G.target});
+  sendAim();
   SFX.key();
 }
 
@@ -925,15 +435,11 @@ const sndLabel = () => SFX.muted ? "소리 끔" : "소리 켬";
 
 /* ===================== 네트워크 =====================
    Cloudflare Worker + Durable Object. 방 하나가 DO 인스턴스 하나다.
-   ?server=... 로 덮어쓸 수 있어서 로컬 개발 서버나 자체 호스팅도 붙는다. */
-const DEFAULT_SERVER = "https://typing-royale.typing-royale-server.workers.dev";
-// 다른 서버 주소는 내 PC에서 띄운 페이지에서만 받는다. 배포된 페이지가 받으면
-// ?server=공격자주소 링크 하나로 로그인 토큰이 그 서버로 간다.
-const LOCAL_PAGE = ["localhost", "127.0.0.1"].includes(location.hostname);
-const SERVER = (LOCAL_PAGE && new URLSearchParams(location.search).get("server")) || DEFAULT_SERVER;
+   게임 화면도 같은 워커가 내보내서 서버 주소는 이 페이지 주소다. 파일로 열면(file://) 연습 모드만 된다. */
+const SERVER = /^https?:$/.test(location.protocol) ? location.origin : "";
 const WS_PROTOCOL = "tr.v1";   // 서버와 같은 값
-const httpBase = () => SERVER.replace(/^ws/, "http").replace(/\/+$/, "");
-const wsBase   = () => SERVER.replace(/^http/, "ws").replace(/\/+$/, "");
+const httpBase = () => SERVER;
+const wsBase   = () => SERVER.replace(/^http/, "ws");
 
 class Net{
   constructor(code, name, handlers){
@@ -971,16 +477,25 @@ function authFetch(path, opts = {}){
   if (AUTH.token) headers.Authorization = "Bearer " + AUTH.token;
   return fetch(httpBase() + path, {...opts, headers});
 }
-/* 로그인하고 돌아왔으면 # 뒤 토큰을 챙기고 주소창에서 지운다 */
-function takeLoginResult(){
+/* 로그인하고 돌아왔으면 # 뒤 1분짜리 교환권으로 세션을 받고 주소창에서 지운다.
+   세션을 주소에 싣지 않는 건 # 뒤 주소도 브라우저 방문 기록에는 남기 때문이다. */
+async function takeLoginResult(){
   const h = new URLSearchParams(location.hash.slice(1));
-  if (!h.has("session") && !h.has("login_error")) return;
+  if (!h.has("ticket") && !h.has("login_error")) return;
+  history.replaceState(null, "", location.pathname + location.search);
   // 내가 누른 로그인에서 돌아온 게 아니면 받지 않는다. 남이 자기 계정 로그인 결과 링크를 보내는 걸 막는다.
   const nonce = lsGet("tr_login_nonce");
   lsSet("tr_login_nonce", "");
-  if (h.get("session") && nonce && h.get("n") === nonce){ AUTH.token = h.get("session"); lsSet("tr_session", AUTH.token); }
-  else setTimeout(()=> toast("로그인하지 못했다"), 300);
-  history.replaceState(null, "", location.pathname + location.search);
+  try {
+    if (!h.get("ticket") || !nonce || h.get("n") !== nonce) throw new Error(h.get("login_error") || "다른 곳에서 시작한 로그인");
+    const r = await fetch(httpBase() + "/auth/exchange", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ticket: h.get("ticket")})});
+    if (!r.ok) throw new Error("교환 " + r.status);
+    AUTH.token = (await r.json()).session;
+    lsSet("tr_session", AUTH.token);
+  } catch (e) {
+    console.warn("로그인하지 못했다", e.message);
+    setTimeout(()=> toast("로그인하지 못했다"), 300);
+  }
 }
 async function loadAccount(){
   if (!SERVER) return;
@@ -994,18 +509,21 @@ async function loadAccount(){
     console.warn("계정 정보를 못 불러왔다", e);
   }
 }
+/* 로그인했으면 계정 닉네임을 바꾼다. 서버가 거절하면(금칙어·중복) 그 이유를 던진다. */
 async function saveNickname(nick){
   if (!AUTH.user || !nick || nick === AUTH.user.nickname) return;
   const r = await authFetch("/me", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({nickname: nick})});
-  if (r.ok) AUTH.user = (await r.json()).user;
-  else console.warn("닉네임 저장 실패", r.status);
+  const body = await r.json().catch(() => ({}));
+  if (r.status === 401){ AUTH.token = ""; AUTH.user = null; lsSet("tr_session", ""); return; }
+  if (!r.ok) throw new Error(body.error || "닉네임을 저장하지 못했다");
+  AUTH.user = body.user;
 }
 async function logout(){
   await authFetch("/logout", {method: "POST"}).catch(e => console.warn("로그아웃 요청 실패", e));
   AUTH.token = ""; AUTH.user = null; lsSet("tr_session", "");
 }
 const accountHtml = () => AUTH.user
-  ? `<b>${esc(AUTH.user.nickname)}</b><span class="tier">${esc(AUTH.user.tier || "")} ${AUTH.user.rating}</span><span><span class="coin num">${AUTH.user.coins}</span> 코인</span><button class="linkbtn" id="logout">로그아웃</button>`
+  ? `<b>${esc(AUTH.user.nickname)}</b><span class="tier">${esc(AUTH.user.tier || "")} ${AUTH.user.rating}</span><span><span class="coin num">${AUTH.user.coins}</span> 코인</span><button class="linkbtn" id="logout">로그아웃</button><button class="linkbtn" id="withdraw">탈퇴</button>`
   : "";   // 기본은 게스트. 로그인 버튼은 상점 안에 있다
 function wireAccount(){
   $("#login")?.addEventListener("click", ()=>{
@@ -1015,6 +533,14 @@ function wireAccount(){
     location.href = httpBase() + "/auth/kakao/start?n=" + nonce;
   });
   $("#logout")?.addEventListener("click", async ()=>{ await logout(); menu(); });
+  $("#withdraw")?.addEventListener("click", async ()=>{
+    if (!confirm("계정과 코인·스킨·레이팅 기록을 모두 지운다. 되돌릴 수 없다. 탈퇴할까?")) return;
+    const r = await authFetch("/me/delete", {method: "POST"}).catch(() => null);
+    if (!r?.ok){ toast("탈퇴하지 못했다"); return; }
+    AUTH.token = ""; AUTH.user = null; lsSet("tr_session", "");
+    toast("탈퇴했다 · 기록을 모두 지웠다", "good");
+    menu();
+  });
 }
 
 /* ===================== 스킨 =====================
@@ -1047,12 +573,11 @@ function applyLoadout(loadout){
 
 /* ===================== 메뉴 ===================== */
 const CFG = {diff:"normal", bots:2, lang: lsGet("tr_lang") === "en" ? "en" : "ko"};
+const STATS_POLL_MS = 30000;
 const DIFF = {easy:{cps:1.3,label:"쉬움"}, normal:{cps:2.1,label:"보통"}, hard:{cps:3.3,label:"어려움"}};
 
 function menu(mode){
-  // 친구에게 받은 ?server= 링크로 들어오면 온라인 탭부터 연다
-  const invited = new URLSearchParams(location.search).has("server");
-  mode = mode || (invited ? "online" : lsGet("tr_mode")) || (SERVER ? "online" : "solo");
+  mode = mode || lsGet("tr_mode") || (SERVER ? "online" : "solo");
   if (mode !== "solo") mode = "online";
   // offline은 저장하지 않는다. 저장해 두면 나중에 서버가 붙어도 안내문만 계속 뜬다.
   lsSet("tr_mode", mode);
@@ -1085,7 +610,7 @@ function menu(mode){
     </div>
     ${mode === "offline" ? `
       <div class="lobby">
-        <div class="wait" style="padding:34px 0">온라인 대전 서버가 아직 연결되지 않았다.<br>연습 모드로 먼저 해봐라.</div>
+        <div class="wait" style="padding:34px 0">온라인 대전은 웹 주소로 열어야 한다.<br>파일로 열었으면 연습 모드로 해봐라.</div>
       </div>
     ` : mode === "solo" ? `
       <div class="opts">
@@ -1115,6 +640,7 @@ function menu(mode){
       <div class="card"><b>순서섞기</b><p>어절 순서를 뒤바꾼다.</p><div class="ex">${EX.reorder}</div></div>
       <div class="card"><b>불가침</b><p>친 부분과 바로 다음 한 어절은 안전. 그 뒤부터 실시간으로 망가진다.</p></div>
     </div>
+    <a class="foot" href="privacy.html">개인정보 처리방침</a>
   </div>`;
 
   const seg = (id,key,cast,after) => { const el=$(id); if(!el) return;
@@ -1143,25 +669,31 @@ function menu(mode){
     el.innerHTML = `지금 <b>${st.online}</b>명 접속 중 · 대기 <b>${st.waiting}</b>명`;
   }).catch(() => {});
   clearInterval(menu.poll);
-  if (SERVER){ showStats(); menu.poll = setInterval(showStats, 10000); }
+  // 탭을 띄워만 둬도 계속 묻지 않게 화면이 보일 때만, 드문드문 묻는다(요청 한도를 아낀다)
+  if (SERVER){ showStats(); menu.poll = setInterval(()=>{ if (document.visibilityState === "visible") showStats(); }, STATS_POLL_MS); }
 
   if (mode === "offline") return;
   if (mode === "solo"){ $("#go").addEventListener("click", ()=>start({})); return; }
 
   const fail = msg => $("#err").textContent = msg;
   const nickOf = () => ($("#nick").value.trim() || "익명").slice(0,12);
-  const remember = () => { const v = $("#nick").value.trim(); lsSet("tr_nick", v); saveNickname(v); };   // 로그인했으면 계정에도 저장
+  // 로그인했으면 계정 닉네임도 바꾼다. 방에 들어가기 전에 끝내야 예전 이름으로 입장하지 않는다.
+  const remember = () => { const v = $("#nick").value.trim(); lsSet("tr_nick", v); return saveNickname(v); };
 
   async function ask(path){
-    if (!SERVER) throw new Error("서버 주소가 설정되지 않았다. 주소창에 ?server=... 를 붙여라");
-    const r = await fetch(httpBase() + path);
-    if (!r.ok) throw new Error("서버 응답 " + r.status);
+    if (!SERVER) throw new Error("온라인 대전은 웹 주소로 열어야 한다");
+    const r = await authFetch(path);   // 랭크전 자리는 로그인한 계정에만 준다
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "서버 응답 " + r.status);
     return r.json();
   }
+  let busy = false;
   const guard = fn => async () => {
+    if (busy) return;
+    busy = true;
     fail("");
-    try { remember(); await fn(); }
+    try { await remember(); await fn(); }
     catch (e) { fail(e.message || "서버에 연결하지 못했다"); }
+    finally { busy = false; }
   };
 
   $("#quick").addEventListener("click", guard(async ()=>{
@@ -1178,7 +710,7 @@ function menu(mode){
   $("#enter").addEventListener("click", guard(async ()=>{
     const code = $("#code").value.trim().toUpperCase();
     if (!code) throw new Error("방 코드를 입력해라");
-    if (!SERVER) throw new Error("서버 주소가 설정되지 않았다");
+    if (!SERVER) throw new Error("온라인 대전은 웹 주소로 열어야 한다");
     lobby(code, nickOf(), false);
   }));
   $("#code").addEventListener("keydown", e => { if (e.key === "Enter") $("#enter").click(); });
@@ -1253,7 +785,8 @@ async function shop(tab = "sound"){
     <div class="sub">${logged
       ? `<b class="coin num">${data.coins}</b> 코인 · 온라인 대전에서 순위가 높을수록 많이 받는다`
       : "스킨은 로그인하면 쓸 수 있다 · 게임하면서 코인을 모아서 산다"}</div>
-    ${logged ? "" : `<div class="account">${AUTH.kakao ? `<button class="kakao" id="login">카카오로 로그인</button>` : "카카오 로그인은 준비 중이다"}</div>`}
+    ${logged ? "" : `<div class="account">${AUTH.kakao ? `<button class="kakao" id="login">카카오로 로그인</button>` : "카카오 로그인은 준비 중이다"}</div>
+    <div class="note">로그인하면 카카오 회원번호와 닉네임·게임 기록을 저장한다. 닉네임은 순위표에 공개된다 · <a href="privacy.html">개인정보 처리방침</a></div>`}
     <div class="modebar" style="margin-top:23px"><div class="seg" id="shopTabs">
       ${Object.entries(SHOP_TABS).map(([k,v]) => `<button data-k="${k}" class="${k===tab?"on":""}">${v}</button>`).join("")}
     </div></div>
@@ -1302,11 +835,11 @@ async function shop(tab = "sound"){
 
 /* ===================== 로비 ===================== */
 const ROOM_MAX = 10;
+const ACCT_MARK = '<i class="acct" title="로그인한 계정"></i>';   // 게스트가 계정 닉네임을 흉내 내도 구별되게
 /* 누르면 바로 그 방으로 들어오는 초대 링크 */
 function inviteLink(code){
   const u = new URL(location.origin + location.pathname);
   u.searchParams.set("room", code);
-  if (new URLSearchParams(location.search).has("server")) u.searchParams.set("server", SERVER);
   return u.toString();
 }
 function menuError(msg){
@@ -1331,10 +864,11 @@ function invite(code){
   </div>`;
   // 주소창에서 방 코드를 지운다. 안 지우면 판이 끝나고 새로고침할 때마다 같은 방 초대 화면이 뜬다.
   const clearLink = () => { const u = new URL(location.href); u.searchParams.delete("room"); history.replaceState(null, "", u); };
-  const join = () => {
+  const join = async () => {
     const nick = $("#nick").value.trim();
     lsSet("tr_nick", nick);
-    saveNickname(nick);
+    try { await saveNickname(nick); }
+    catch (e) { toast(e.message); return; }
     clearLink();
     lobby(code, (nick || "익명").slice(0, 12), code.startsWith("AUTO"));
   };
@@ -1346,56 +880,10 @@ function invite(code){
 
 function lobby(code, name, auto, retry = 0){
   clearInterval(menu.poll);
-  let players = [], deadline = 0, host = null, copiedAt = 0, tick = null;
+  let players = [], deadline = 0, host = null, copiedAt = 0;
   const ranked = code.startsWith("RANK"), since = Date.now();
-
-  const render = () => {
-    const left = deadline ? Math.max(0, Math.ceil((deadline - Date.now())/1000)) : null;
-    const isHost = !auto && host === lobby.you;
-    const me = players.find(p => p.id === lobby.you);
-    // 직접 판 방은 방장 빼고 전원, 빠른 시작 방은 전원이 준비해야 한다(서버와 같은 규칙)
-    const others = players.filter(p => auto || p.id !== host);
-    const readyCount = others.filter(p => p.ready).length;
-    const allReady = players.length >= 2 && readyCount === others.length;
-    const status = auto
-      ? (players.length < 2
-          ? (ranked ? `랭크전 상대를 찾는 중 · <b>${Math.floor((Date.now() - since) / 1000)}초</b>`   // 랭크전은 봇전으로 안 넘어간다
-                    : `상대를 기다리는 중${left !== null ? ` · <b>${left}초</b> 뒤 봇전으로 시작` : ""}`)
-          : `준비 <b>${readyCount}/${players.length}</b> · 모두 준비하면 바로 시작${left !== null ? ` · <b>${left}초</b> 뒤 자동 시작` : ""}`)
-      : isHost
-        ? (players.length < 2 ? "친구가 들어오면 시작할 수 있다"
-           : allReady ? "<b>모두 준비됐다</b> · 시작해라" : `준비 <b>${readyCount}/${others.length}</b> · 다 준비해야 시작할 수 있다`)
-        : me?.ready ? "준비 완료 · 방장이 시작하길 기다리는 중" : "준비를 눌러야 방장이 시작할 수 있다";
-    app.innerHTML = `
-    <div class="menu">
-      <div class="kicker">${ranked ? "랭크전" : auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}</div>
-      <div class="lobby" style="margin-top:29px">
-        ${ranked ? "" /* 랭크전은 상대를 고를 수 없게 초대 링크를 안 보여 준다 */ : `
-        <div class="code" id="copy" title="눌러서 초대 링크 복사">${esc(code)}</div>
-        <div class="field invite">
-          <input id="inviteUrl" readonly value="${esc(inviteLink(code))}">
-          <button class="btn" id="copyLink">${Date.now() - copiedAt < 1500 ? "복사됨" : "초대 링크 복사"}</button>
-        </div>
-        <div class="codehint">링크를 받은 사람은 누르면 닉네임만 정하고 바로 이 방에 들어온다</div>`}
-        <div class="slots">
-          ${players.map(p=>`<div class="slot"><span class="grow">${esc(p.name)}</span>${!auto && p.id===host?'<span class="host">방장</span>':p.ready?'<span class="ready">준비</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}</div>`).join("")}
-          ${Array.from({length: Math.max(0, 2 - players.length)}, ()=>`<div class="slot empty">비어 있음</div>`).join("")}
-        </div>
-        <div class="wait">${status}</div>
-        ${isHost
-          ? `<div class="field"><button class="btn" id="begin" style="flex:1" ${allReady ? "" : "disabled"}>게임 시작</button></div>`
-          : `<div class="field"><button class="btn${me?.ready ? " ghost" : ""}" id="ready" style="flex:1">${me?.ready ? "준비 취소" : "준비"}</button></div>`}
-        <div class="field"><button class="btn ghost" id="leave" style="flex:1">나가기</button></div>
-        <div class="err" id="err"></div>
-      </div>
-    </div>`;
-    $("#copy")?.addEventListener("click", copyInvite);
-    $("#copyLink")?.addEventListener("click", copyInvite);
-    $("#inviteUrl")?.addEventListener("focus", e => e.target.select());
-    $("#leave").addEventListener("click", ()=>{ stop(); menu("online"); });
-    $("#begin")?.addEventListener("click", ()=> net.send({t:"start"}));
-    $("#ready")?.addEventListener("click", ()=> net.send({t:"ready", on: !me?.ready}));
-  };
+  // 바뀐 부분만 다시 그린다. 버튼을 매번 새로 만들면 누르는 사이에 바뀌어 클릭이 씹힌다.
+  const setHtml = (sel, html) => { const el = $(sel); if (el && el._h !== html){ el._h = html; el.innerHTML = html; } };
 
   /* 폰이면 공유창을 띄우고, PC면 클립보드에 복사한다. 클립보드가 막힌 브라우저면 링크를 선택해 둬서 Ctrl+C만 누르면 된다. */
   const copyInvite = async () => {
@@ -1409,11 +897,73 @@ function lobby(code, name, auto, retry = 0){
     }
   };
 
+  app.innerHTML = `
+  <div class="menu">
+    <div class="kicker" id="lkick"></div>
+    <div class="lobby" style="margin-top:29px">
+      ${ranked ? "" /* 랭크전은 상대를 고를 수 없게 초대 링크를 안 보여 준다 */ : `
+      <div class="code" id="copy" title="눌러서 초대 링크 복사">${esc(code)}</div>
+      <div class="field invite">
+        <input id="inviteUrl" readonly value="${esc(inviteLink(code))}">
+        <button class="btn" id="copyLink">초대 링크 복사</button>
+      </div>
+      <div class="codehint">링크를 받은 사람은 누르면 닉네임만 정하고 바로 이 방에 들어온다</div>`}
+      <div class="slots" id="slots"></div>
+      <div class="wait" id="lwait"></div>
+      <div class="field" id="lact"></div>
+      <div class="field"><button class="btn ghost" id="leave" style="flex:1">나가기</button></div>
+      <div class="err" id="err"></div>
+    </div>
+  </div>`;
+  $("#copy")?.addEventListener("click", copyInvite);
+  $("#copyLink")?.addEventListener("click", copyInvite);
+  $("#inviteUrl")?.addEventListener("focus", e => e.target.select());
+  $("#leave").addEventListener("click", ()=>{ stop(); menu("online"); });
+  $("#slots").addEventListener("click", e => { const b = e.target.closest("[data-kick]"); if (b) net.send({t:"kick", id: b.dataset.kick}); });
+  $("#lact").addEventListener("click", e => {
+    const me = players.find(p => p.id === lobby.you);
+    if (e.target.closest("#begin")) net.send({t:"start"});
+    else if (e.target.closest("#ready")) net.send({t:"ready", on: !me?.ready});
+  });
+
+  const render = () => {
+    const left = deadline ? Math.max(0, Math.ceil((deadline - Date.now())/1000)) : null;
+    const isHost = !auto && host === lobby.you;
+    const me = players.find(p => p.id === lobby.you);
+    // 직접 판 방은 방장 빼고 전원, 빠른 시작 방은 전원이 준비해야 한다(서버와 같은 규칙)
+    const others = players.filter(p => auto || p.id !== host);
+    const readyCount = others.filter(p => p.ready).length;
+    const allReady = players.length >= 2 && readyCount === others.length;
+    const status = ranked
+      ? (players.length < 2 ? `랭크전 상대를 찾는 중 · <b>${Math.floor((Date.now() - since) / 1000)}초</b>`   // 랭크전은 봇전으로 안 넘어간다
+                            : `${players.length}명 · ${left !== null ? `<b>${left}초</b> 뒤 시작` : "곧 시작"}`)
+      : auto
+        ? (players.length < 2
+            ? `상대를 기다리는 중${left !== null ? ` · <b>${left}초</b> 뒤 봇전으로 시작` : ""}`
+            : `준비 <b>${readyCount}/${players.length}</b> · 모두 준비하면 바로 시작${left !== null ? ` · <b>${left}초</b> 뒤 자동 시작` : ""}`)
+        : isHost
+          ? (players.length < 2 ? "친구가 들어오면 시작할 수 있다"
+             : allReady ? "<b>모두 준비됐다</b> · 시작해라" : `준비 <b>${readyCount}/${others.length}</b> · 다 준비해야 시작할 수 있다`)
+          : me?.ready ? "준비 완료 · 방장이 시작하길 기다리는 중" : "준비를 눌러야 방장이 시작할 수 있다";
+    const kicker = `${ranked ? "랭크전" : auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}`;
+    if ($("#lkick").textContent !== kicker) $("#lkick").textContent = kicker;
+    setHtml("#slots",
+      players.map(p=>`<div class="slot"><span class="grow">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span>${!auto && p.id===host?'<span class="host">방장</span>':p.ready?'<span class="ready">준비</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}${isHost && p.id !== lobby.you ? `<button class="linkbtn" data-kick="${esc(p.id)}">내보내기</button>` : ""}</div>`).join("") +
+      Array.from({length: Math.max(0, 2 - players.length)}, ()=>`<div class="slot empty">비어 있음</div>`).join(""));
+    setHtml("#lwait", status);
+    setHtml("#lact", ranked ? ""
+      : isHost ? `<button class="btn" id="begin" style="flex:1" ${allReady ? "" : "disabled"}>게임 시작</button>`
+      : `<button class="btn${me?.ready ? " ghost" : ""}" id="ready" style="flex:1">${me?.ready ? "준비 취소" : "준비"}</button>`);
+    const copied = Date.now() - copiedAt < 1500 ? "복사됨" : "초대 링크 복사";
+    if ($("#copyLink") && $("#copyLink").textContent !== copied) $("#copyLink").textContent = copied;
+  };
+
+  const tick = setInterval(render, 500);   // 카운트다운 숫자만 바뀐다. 버튼은 상태가 바뀔 때만 다시 만든다
   const stop = () => { clearInterval(tick); net.close(); };
 
   const net = new Net(code, name, {
     joined: m => {
-      lobby.you = m.you; host = m.host;
+      lobby.you = m.you; host = m.host; auto = m.auto;
       // 방 언어는 먼저 들어온 사람 기준이다. 한타·영타가 한 방에 섞이면 공정하지 않다.
       if (m.lang && m.lang !== CFG.lang){ CFG.lang = m.lang; toast(m.lang === "en" ? "영타 방에 들어왔다" : "한타 방에 들어왔다"); }
       render();
@@ -1424,9 +974,9 @@ function lobby(code, name, auto, retry = 0){
       stop();
       // 빠른 시작은 배정받고 들어가는 사이에 방이 차거나 시작할 수 있다. 조용히 다른 방을 다시 받는다.
       if (auto && retry < 2){
-        fetch(httpBase() + "/join?lang=" + CFG.lang + (ranked ? "&ranked=1" : "")).then(r => r.json())
-          .then(j => lobby(j.code, name, true, retry + 1))
-          .catch(() => menuError("서버에 연결하지 못했다"));
+        authFetch("/join?lang=" + CFG.lang + (ranked ? "&ranked=1" : "")).then(r => r.json())
+          .then(j => { if (!j.code) throw new Error(j.error); lobby(j.code, name, true, retry + 1); })
+          .catch(() => menuError(m.reason || "서버에 연결하지 못했다"));
         return;
       }
       menuError(m.reason);
@@ -1434,11 +984,10 @@ function lobby(code, name, auto, retry = 0){
     start: m => { clearInterval(tick); start({net, code, you: lobby.you, countdown: m.countdown}); },
     solo: () => { clearInterval(tick); net.close(); toast("상대가 없어서 봇전으로 시작한다"); start({}); },
     fail: () => { clearInterval(tick); menuError("서버에 연결하지 못했다"); },
-    gone: () => { if (!G || !G.running){ clearInterval(tick); } }
+    gone: () => { if (!G || !G.running){ clearInterval(tick); menuError("서버 연결이 끊겼다"); } }
   });
 
   render();
-  tick = setInterval(()=>{ if (deadline || Date.now() - copiedAt < 2000 || (ranked && players.length < 2)) render(); }, 500);   // 카운트다운이나 복사 안내가 있을 때만 다시 그린다
 }
 
 /* ===================== 게임 ===================== */
@@ -1515,6 +1064,7 @@ function wireGame(net){
       if (G.spectating) over(false);   // 관전하던 사람은 우승자가 나오면 최종 순위를 본다
     },
     end: m => { G.me.rank = m.rank; G.me.alive = !!m.win; if (m.win) over(true); else spectate(); },
+    denied: m => toast(m.reason || "서버 연결이 거절됐다"),
     gone: () => { if (G && G.running){ toast("서버 연결이 끊겼다"); over(false); } }
   };
 }
@@ -1555,7 +1105,7 @@ function renderGame(){
     const p = G.players.find(x => x.id === c.dataset.id);
     if (!p || !p.alive) return;
     G.target = G.target === p.id ? null : p.id;
-    if (G.online) G.net.send({t:"aim", id:G.target});
+    sendAim();
     $("#type").focus();
   });
 
@@ -1797,7 +1347,7 @@ function drawWatch(){
     G.watchOrder = order;
     box.innerHTML = list.map(p => `
       <div class="wcard" id="w-${p.id}">
-        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}</span><span class="dn"></span></div>
+        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span><span class="dn"></span></div>
         <div class="wline"></div>
         <div class="pbar"><i></i></div>
       </div>`).join("");
@@ -1888,7 +1438,7 @@ function draw(){
   if (box.children.length !== foes.length){
     box.innerHTML = foes.map(p=>`
       <div class="foe" id="foe-${p.id}" data-id="${p.id}">
-        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}</span><span class="dn"></span></div>
+        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span><span class="dn"></span></div>
         <div class="pbar"><i></i></div>
         <div class="meta"><span class="load"></span><span class="sp"></span></div>
         <div class="mini"></div>
@@ -1909,19 +1459,15 @@ function draw(){
 
 }
 
-// 초대 링크(?room=코드)로 들어오면 닉네임부터 정하고 그 방으로 간다
+// 초대 링크(?room=코드)로 들어오면 닉네임부터 정하고 그 방으로 간다. 랭크전 방은 초대로 못 들어간다.
 const invitedRoom = (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
-takeLoginResult();
-if (invitedRoom && SERVER) invite(invitedRoom);
+if (invitedRoom && !invitedRoom.startsWith("RANK") && SERVER) invite(invitedRoom);
 else menu();
 // 계정은 화면을 먼저 띄운 뒤 불러와서 채운다. 기다렸다 그리면 느린 망에서 빈 화면이 오래 보인다.
-loadAccount().then(()=>{
+takeLoginResult().then(loadAccount).then(()=>{
   applyLoadout(AUTH.user);
   const box = $("#account");
   if (box){ box.innerHTML = accountHtml(); wireAccount(); }
   const nickInput = $("#nick");
   if (nickInput && AUTH.user && !nickInput.value) nickInput.value = AUTH.user.nickname;
 });
-</script>
-</body>
-</html>

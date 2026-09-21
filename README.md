@@ -4,7 +4,7 @@
 
 **플레이 →** https://nohseongmin.github.io/typing-royale/
 
-의존성 없는 단일 HTML 파일. 받아서 브라우저로 열어도 그대로 돌아간다.
+클라이언트는 `public/`의 HTML·JavaScript, 서버는 `server/`의 Cloudflare Worker와 Durable Objects로 구성된다. 새 배포에서는 같은 출처에서 게임과 API를 제공한다.
 
 ## 규칙
 
@@ -32,7 +32,15 @@
 
 ## 멀티플레이
 
-아직 없다. `sendAttack()` 한 군데에서 `target.hit()`을 직접 부르고 있는데, 여기를 소켓으로 `{from, to, kind}`를 보내고 수신 이벤트에서 `Player.hit()`을 부르도록 바꾸면 나머지 로직은 그대로 쓸 수 있다.
+방 생성·초대 링크·준비·카운트다운·관전을 지원한다. Durable Object가 방별 진행도와 탈락을 관리하고 공격을 중계한다. 현재 완료 신고와 공격 적용에는 클라이언트 신뢰가 남아 있으며, 속도 제한은 완전한 부정행위 방지가 아니다.
+
+## 개발과 배포
+
+Node 22.23.2 이상 22.x 또는 24.21.0 이상 24.x가 필요하다. `server/`에서 `npm ci --ignore-scripts`, `npm test`, `npm run dev`를 실행한다. 의존성은 lockfile로 고정하며 오래된 Node는 `.npmrc`에서 거절한다.
+
+공개 전 남은 항목은 `SECURITY-STATUS.md`에 기록한다. 검증이 끝나면 `server/`에서 `npm run deploy`로 테스트 → 원격 D1 마이그레이션 → Worker 배포 순서로 실행한다. Worker에서 화면·API가 정상임을 확인한 뒤 main을 푸시한다. GitHub Actions는 기존 Pages 주소를 새 Worker 주소로 안내하는 페이지만 배포한다.
+
+0005 마이그레이션은 이전 Worker가 쓰는 `oauth_states`를 유지한다. 배포 실패 시 이전 Worker로 돌아갈 수 있도록 테이블을 먼저 삭제하지 않는다. 운영 DB에 적용된 마이그레이션은 다시 편집하지 않는다.
 
 ## 라이선스
 

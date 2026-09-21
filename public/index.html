@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>타자 배틀로얄</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css" integrity="sha384-y9k2lBaj/ETgBd4674Kql3098euvZU5fWlBcBBrlROBI6c2KDmjWhd508Rfsx9R/" crossorigin="anonymous">
+<script src="theme.js"></script>
+<style>
+:root{
+  --bg:#fff; --soft:#f6f7f9; --soft2:#eef0f4; --line:#e8eaee;
+  --ink:#191b1e; --mute:#8b93a1; --dim:#c9ced7;
+  --acc:#10b981; --acc-soft:color-mix(in srgb, var(--acc) 12%, var(--bg));
+  --pink:#ec4899; --pink-soft:#fdeaf4;
+  --red:#ef4444;
+  --no-bg:#fee2e2; --risk-bg:#fff1f2; --out-bg:#fff0f0; --out-ink:#b91c1c;
+  --ok-ink:#0b7a5c; --dmg-ink:#a51f68; --veil:rgba(255,255,255,.88);
+  --toast-bg:#191b1e; --toast-ink:#fff; --shadow:rgba(0,0,0,.16);
+  --fire:#f97316; --fire-soft:rgba(249,115,22,.35);
+  --row:125px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0f1115; --soft:#181b22; --soft2:#232833; --line:#2a2f3a;
+  --ink:#e8eaee; --mute:#8b93a1; --dim:#4b5262;
+  --acc-soft:color-mix(in srgb, var(--acc) 16%, var(--bg)); --pink:#f472b6; --pink-soft:#2e1726; --red:#f87171;
+  --no-bg:#3b1a1e; --risk-bg:#2a1418; --out-bg:#2b1719; --out-ink:#fca5a5;
+  --ok-ink:#6ee7b7; --dmg-ink:#f9a8d4; --veil:rgba(15,17,21,.88);
+  --toast-bg:#e8eaee; --toast-ink:#0f1115; --shadow:rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); transition:background .35s;
+  font-family:"Pretendard Variable",Pretendard,system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-size:19px; display:flex; align-items:center; justify-content:center; padding:31px;
+  -webkit-font-smoothing:antialiased;
+}
+#app{width:100%;max-width:1404px}
+body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 */
+.num{font-variant-numeric:tabular-nums}
+
+/* ================= menu ================= */
+.menu{text-align:center;padding:31px 10px}
+.kicker{font-size:14px;letter-spacing:3px;color:var(--mute);font-weight:700}
+.logo{font-size:60px;font-weight:800;letter-spacing:-1.5px;margin-top:13px}
+.logo em{font-style:normal;color:var(--acc)}
+.sub{color:var(--mute);margin-top:16px;font-size:18px}
+.opts{display:flex;gap:42px;justify-content:center;flex-wrap:wrap;margin:44px 0 34px}
+.opt h4{font-size:14px;color:var(--mute);letter-spacing:2px;margin-bottom:12px;font-weight:700;text-align:left}
+.seg{display:flex;gap:8px}
+.seg button{
+  background:var(--soft);color:var(--mute);border:1px solid transparent;border-radius:1299px;
+  padding:12px 23px;font:inherit;font-size:18px;font-weight:600;cursor:pointer;transition:.15s
+}
+.seg button.on{background:var(--acc);color:#fff}
+.seg button:hover:not(.on){background:var(--soft2);color:var(--ink)}
+.btn{
+  background:var(--acc);color:#fff;border:0;border-radius:1299px;padding:20px 60px;
+  font:inherit;font-size:21px;font-weight:700;cursor:pointer;transition:.15s;
+  box-shadow:0 8px 23px color-mix(in srgb, var(--acc) 28%, transparent)
+}
+.btn:hover{transform:translateY(-1px)}
+.btn.ghost{background:var(--soft);color:var(--mute);box-shadow:none;font-size:20px;padding:18px 39px}
+.btn.ghost[disabled]{opacity:.6;cursor:not-allowed;transform:none}
+.btn[disabled]{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.lobby{max-width:598px;margin:0 auto;text-align:left}
+.lobby h3{font-size:17px;color:var(--mute);letter-spacing:2px;font-weight:700;margin-bottom:13px;text-align:center}
+.code{
+  font-size:49px;font-weight:800;letter-spacing:8px;text-align:center;
+  background:var(--soft);border-radius:21px;padding:23px;margin-bottom:8px;cursor:pointer
+}
+.code:hover{background:var(--soft2)}
+.codehint{text-align:center;font-size:15px;color:var(--mute);margin-bottom:23px}
+.slots{display:flex;flex-direction:column;gap:8px;margin-bottom:23px}
+.slot{display:flex;align-items:center;gap:10px;background:var(--soft);border-radius:16px;padding:14px 18px;font-size:18px;font-weight:600}
+.slot.empty{background:none;border:1px dashed var(--line);color:var(--dim);font-weight:500}
+.slot .me{font-size:13px;font-weight:800;color:#fff;background:var(--acc);padding:2px 9px;border-radius:1299px}
+.wait{text-align:center;color:var(--mute);font-size:17px;margin-bottom:23px}
+.wait b{color:var(--ink);font-variant-numeric:tabular-nums}
+.field{display:flex;gap:10px;margin-bottom:13px}
+.field input{
+  flex:1;background:var(--soft);border:1px solid transparent;border-radius:1299px;
+  padding:16px 23px;font:inherit;font-size:18px;color:var(--ink);outline:none;min-width:0
+}
+.field input:focus{border-color:var(--acc);background:var(--bg)}
+.field input::placeholder{color:var(--dim)}
+.field .btn{padding:16px 31px;font-size:18px;white-space:nowrap}
+.err{color:var(--red);font-size:16px;text-align:center;min-height:23px;margin-top:10px}
+.modebar{display:flex;gap:18px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:34px}
+.snd{background:var(--soft);color:var(--mute);border:0;border-radius:1299px;padding:12px 18px;font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+.snd:hover{background:var(--soft2);color:var(--ink)}
+.cards{
+  margin-top:47px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;text-align:left
+}
+.card{background:var(--soft);border-radius:18px;padding:21px 23px}
+.card b{display:block;font-size:17px;margin-bottom:8px}
+.card p{font-size:16px;color:var(--mute);line-height:1.65}
+.card .ex{margin-top:10px;font-size:16px;color:var(--pink);font-weight:600}
+
+/* ================= hud ================= */
+.hud{display:flex;align-items:center;gap:18px;margin-bottom:23px}
+.hud .tick{flex:1;height:5px;background:var(--soft2);border-radius:1299px;overflow:hidden}
+.hud .tick i{display:block;height:100%;background:var(--acc);transition:width .1s linear}
+.hud.danger .tick i{background:var(--red)}
+.stat{display:flex;align-items:baseline;gap:5px}
+.stat b{font-size:25px;font-weight:800}
+.stat u{font-size:14px;color:var(--mute);text-decoration:none}
+.stat+.stat{margin-left:18px}
+.hud .tleft{font-size:16px;color:var(--mute);white-space:nowrap}
+.hud.danger .tleft{color:var(--red);font-weight:700}
+
+/* ================= stage ================= */
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 307px;gap:21px;align-items:start}
+.board{
+  background:var(--bg);border:1px solid var(--line);border-radius:26px;
+  padding:10px 29px 23px;position:relative;overflow:hidden
+}
+.board::before{
+  content:"";position:absolute;left:13px;right:13px;top:calc(10px + var(--row));height:var(--row);
+  background:var(--soft);border-radius:18px;z-index:0
+}
+/* 피격 연출: 화면 전체가 흔들리고 보드 테두리가 핑크로 번쩍인다 */
+.board::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:4;
+  box-shadow:inset 0 0 0 0 transparent;transition:box-shadow .5s
+}
+.board.flash::after{box-shadow:inset 0 0 0 3px var(--pink),inset 0 0 91px rgba(236,72,153,.28);transition:none}
+#app.jolt{animation:jolt .38s cubic-bezier(.36,.07,.19,.97)}
+#app.jolt-big{animation:jolt-big .52s cubic-bezier(.36,.07,.19,.97)}
+@keyframes jolt{
+  10%,90%{transform:translate(-2px,1px)} 20%,80%{transform:translate(5px,-2px)}
+  30%,50%,70%{transform:translate(-9px,2px)} 40%,60%{transform:translate(9px,-2px)}
+}
+@keyframes jolt-big{
+  10%,90%{transform:translate(-5px,2px) rotate(-.3deg)} 20%,80%{transform:translate(10px,-3px) rotate(.4deg)}
+  30%,50%,70%{transform:translate(-17px,5px) rotate(-.6deg)} 40%,60%{transform:translate(17px,-5px) rotate(.6deg)}
+}
+@media (prefers-reduced-motion: reduce){ #app.jolt,#app.jolt-big,.foe.smash,.board.recoil,.board.fire2{animation:none} }
+.rail{position:relative;height:calc(var(--row)*3);overflow:hidden;z-index:1}
+.track{transform:translateY(calc(var(--row) * -1))}
+.track.go{transition:transform .42s cubic-bezier(.22,1,.36,1)}
+.row{height:var(--row);display:flex;align-items:center;justify-content:center;padding:0 8px}
+.fit{display:inline-block;white-space:nowrap;transform-origin:center center;font-size:40px;font-weight:600;letter-spacing:.5px}
+.row.past{opacity:0}
+.row.next{opacity:.45}
+.row.shake{animation:sk .22s}
+@keyframes sk{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+.ch{color:var(--dim);transition:color .08s;position:relative;padding-bottom:9px;white-space:pre}
+.ch.tail:empty{display:none}
+.ch.dt{color:var(--pink);opacity:.6}
+.ch.ok{color:var(--ink);opacity:1}
+.ch.comp{color:var(--acc);opacity:1}
+.ch.no{color:var(--red);opacity:1;background:var(--no-bg);border-radius:3px}
+/* 틀린 자리 위에 원래 글자를 흐릿하게 남긴다 */
+.ch[data-t]:not([data-t=""])::before{
+  content:attr(data-t);position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
+  font-size:.52em;line-height:1;color:var(--mute);opacity:.85;font-weight:600;pointer-events:none;margin-bottom:2px
+}
+.ch.cur::after{
+  content:"";position:absolute;left:6%;right:6%;bottom:0;height:3px;
+  background:var(--acc);border-radius:2px;animation:cb 1s steps(2) infinite
+}
+@keyframes cb{50%{opacity:0}}
+.row.next .ch.dt{opacity:1;font-weight:800}
+
+#type{position:absolute;opacity:0;left:-12999px}
+.hint{text-align:center;font-size:16px;color:var(--mute);height:23px;margin-top:2px}
+.hint b{color:var(--pink)}
+.blur{
+  position:absolute;inset:0;background:var(--veil);z-index:5;
+  display:none;align-items:center;justify-content:center;font-size:18px;color:var(--mute);cursor:pointer
+}
+.blur.on{display:flex}
+
+/* ================= foes ================= */
+.foes{display:flex;flex-direction:column;gap:10px}
+.foe{background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:16px 17px;cursor:pointer;transition:.15s}
+.foe:hover{background:var(--soft)}
+.foe.target{border-color:var(--pink);background:var(--pink-soft)}
+.foe.dead{opacity:.4}
+.foe.hit{animation:fl .5s}
+@keyframes fl{0%,100%{background:transparent}30%{background:var(--pink-soft)}}
+.foe .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.foe .rk{font-size:13px;font-weight:800;color:var(--mute);background:var(--soft2);padding:2px 8px;border-radius:1299px}
+.foe .nm{font-size:17px;font-weight:700;flex:1}
+.foe .dn{font-size:15px;color:var(--mute)}
+.pbar{height:5px;background:var(--soft2);border-radius:1299px;overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--acc);transition:width .12s linear}
+.foe .meta{display:flex;justify-content:space-between;margin-top:9px;font-size:14px;color:var(--mute)}
+.foe .load{color:var(--pink);font-weight:800}
+.aim{font-size:14px;color:var(--mute);text-align:center;padding:8px}
+
+.feed{margin-top:13px;display:flex;flex-direction:column-reverse;gap:5px;height:156px;overflow:hidden}
+.ev{font-size:15px;color:var(--mute);padding:6px 13px;background:var(--soft);border-radius:10px;animation:sl .2s}
+.ev.me{background:var(--acc-soft);color:var(--ok-ink)}
+.ev.dmg{background:var(--pink-soft);color:var(--dmg-ink);font-weight:600}
+.ev.out{background:var(--out-bg);color:var(--out-ink);font-weight:700}
+@keyframes sl{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+
+#toast{position:fixed;bottom:29px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column-reverse;gap:9px;align-items:center;pointer-events:none;z-index:60}
+.tst{background:var(--toast-bg);color:var(--toast-ink);padding:12px 26px;border-radius:1299px;font-size:17px;font-weight:700;animation:pp .25s;box-shadow:0 10px 26px var(--shadow)}
+.tst.atk{background:var(--pink)}
+.tst.good{background:var(--acc)}
+@keyframes pp{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+
+/* ================= over ================= */
+.over{text-align:center;padding:65px 26px}
+.over .big{font-size:68px;font-weight:800;letter-spacing:-2px}
+.over .big.win{color:var(--acc)}
+.over p{color:var(--mute);margin-top:13px}
+.final{display:flex;gap:18px;justify-content:center;margin:42px 0}
+.final .card{background:var(--soft);border-radius:18px;padding:21px 34px;text-align:center}
+.final .card b{font-size:34px;font-weight:800;display:block}
+.final .card u{font-size:14px;color:var(--mute);text-decoration:none}
+/* ================= 추가 UI ================= */
+.online{margin-top:13px;font-size:16px;color:var(--mute);min-height:23px}
+.online b{color:var(--acc)}
+.invite input{font-size:16px;color:var(--mute)}
+.slot .host{font-size:13px;font-weight:800;color:var(--ink);background:var(--soft2);padding:2px 9px;border-radius:1299px}
+.aimpill{font-size:16px;color:var(--mute);white-space:nowrap}
+.aimpill b{color:var(--pink)}
+.hud.fire1 .stat.streak b,.hud.fire2 .stat.streak b{color:var(--fire)}
+.board.fire1{border-color:var(--fire);box-shadow:0 0 0 1px var(--fire),0 0 34px var(--fire-soft)}
+.board.fire2{border-color:var(--fire);animation:blaze 1.1s ease-in-out infinite}
+@keyframes blaze{0%,100%{box-shadow:0 0 0 2px var(--fire),0 0 39px var(--fire-soft)}50%{box-shadow:0 0 0 2px var(--fire),0 0 73px var(--fire)}}
+.tst.fire{background:var(--fire);color:#fff}
+
+/* 공격 연출: 공격 이름을 단 불덩이가 내 보드에서 상대 카드로 날아가 터진다 */
+.orb{position:fixed;z-index:70;pointer-events:none;padding:9px 18px;border-radius:1299px;white-space:nowrap;
+  font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#f9a8d4,#ec4899 55%,#be185d);
+  box-shadow:0 0 0 5px rgba(236,72,153,.25),0 0 36px 8px rgba(236,72,153,.55)}
+.orb.fire{background:linear-gradient(135deg,#fdba74,#f97316 55%,#c2410c);box-shadow:0 0 0 5px rgba(249,115,22,.25),0 0 39px 10px rgba(249,115,22,.6)}
+.spark{position:fixed;z-index:70;width:10px;height:10px;border-radius:50%;background:var(--pink);box-shadow:0 0 13px var(--pink);pointer-events:none}
+.spark.fire{background:var(--fire);box-shadow:0 0 13px var(--fire)}
+.foe.smash{animation:smash .45s}
+@keyframes smash{
+  0%{transform:none} 18%{transform:scale(1.06) rotate(-2deg);border-color:var(--pink);background:var(--pink-soft)}
+  38%{transform:translateX(-10px) rotate(1.5deg)} 58%{transform:translateX(8px)} 78%{transform:translateX(-3px)} 100%{transform:none}
+}
+.board.recoil{animation:recoil .22s}
+@keyframes recoil{35%{transform:scale(.985)}}
+/* 상대가 지금 치는 문장 */
+.foe .mini{margin-top:9px;font-size:16px;line-height:1.45;white-space:pre;overflow:hidden;color:var(--dim);height:24px}
+.mini .mok,.wline .mok{color:var(--ink)}
+.mini .mno,.wline .mno{color:var(--red);background:var(--no-bg);border-radius:3px}
+.mini .mcur{box-shadow:inset 0 -2px 0 var(--acc)}
+.mini .mdt,.wline .mdt{color:var(--pink)}
+/* 관전 */
+.watchhead{text-align:center;color:var(--mute);font-size:16px;margin:5px 0 18px}
+.watchhead b{color:var(--ink)}
+.watch{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:13px}
+.wcard{background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:18px 21px}
+.wcard.dead{opacity:.4}
+.wcard .top{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.wcard .rk{font-size:13px;font-weight:800;color:var(--mute);background:var(--soft2);padding:3px 9px;border-radius:999px}
+.wcard .nm{font-size:18px;font-weight:700;flex:1}
+.wcard .dn{font-size:14px;color:var(--mute)}
+.wline{font-size:23px;line-height:1.55;white-space:pre-wrap;word-break:keep-all;color:var(--dim);min-height:72px;margin-bottom:10px}
+.wline .mcur{box-shadow:inset 0 -3px 0 var(--acc)}
+/* 결과 순위표 */
+.standings{max-width:520px;margin:0 auto 29px;display:flex;flex-direction:column;gap:7px;text-align:left}
+.srow{display:flex;align-items:center;gap:13px;background:var(--soft);border-radius:14px;padding:12px 18px;font-size:17px}
+.srow b{min-width:52px;font-weight:800}
+.srow span{flex:1;font-weight:600}
+.srow u{text-decoration:none;color:var(--mute);font-size:14px}
+.srow.me{background:var(--acc-soft)}
+.srow.first b{color:var(--acc)}
+/* 시작 카운트다운 */
+.count{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;font-size:130px;font-weight:800;color:var(--acc);background:var(--veil)}
+.count:empty{display:none}
+/* 로비 준비 */
+.slot .grow{flex:1}
+.slot .ready{font-size:13px;font-weight:800;color:var(--ok-ink);background:var(--acc-soft);padding:3px 9px;border-radius:999px}
+/* 계정 */
+.account{margin-top:8px;font-size:15px;color:var(--mute);min-height:34px;display:flex;gap:10px;justify-content:center;align-items:center}
+.account b{color:var(--ink)}
+.account .coin{color:#d97706;font-weight:800}
+.kakao{background:#FEE500;color:rgba(0,0,0,.85);border:0;border-radius:12px;padding:10px 20px;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
+.linkbtn{background:none;border:0;color:var(--mute);font:inherit;font-size:15px;text-decoration:underline;cursor:pointer;padding:0}
+/* 상점 */
+.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:13px;margin-top:23px;text-align:left}
+.item{background:var(--soft);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:10px;border:2px solid transparent}
+.item.on{border-color:var(--acc)}
+.item b{font-size:18px}
+.item u{text-decoration:none;color:var(--mute);font-size:14px}
+.item .pv{min-height:44px}
+.item div.pv{font-size:22px;display:flex;align-items:center}
+.item .btn{padding:12px 16px;font-size:16px}
+.swatch{gap:8px}
+.swatch i{width:34px;height:34px;border-radius:50%;background:var(--sw)}
+.swatch i:nth-child(2){opacity:.55}
+.swatch i:nth-child(3){opacity:.2}
+.coin{color:#d97706}
+.reward{margin-top:10px;font-size:22px;font-weight:800;color:#d97706;min-height:30px}
+/* 글꼴 스킨은 치는 문장에만 입힌다. 메뉴·숫자까지 바뀌면 읽기 힘들다. */
+.fit,.wline,.foe .mini{font-family:var(--type-font, inherit)}
+/* 랭크전 */
+.btn.rankbtn{background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 8px 23px rgba(239,68,68,.25)}
+.tier{font-size:13px;font-weight:800;color:#b45309;background:color-mix(in srgb, #f59e0b 18%, var(--bg));padding:3px 10px;border-radius:999px}
+.rating{margin-top:6px;font-size:18px;color:var(--mute);min-height:26px}
+.rating b{color:var(--ink)}
+/* 로그인 계정 표시 · 개인정보 안내 */
+.acct{display:inline-block;width:.42em;height:.42em;border-radius:50%;background:var(--acc);margin-left:.35em;vertical-align:middle}
+.note{margin-top:10px;font-size:13px;color:var(--mute);line-height:1.6}
+.note a,.foot{color:var(--mute)}
+.foot{display:inline-block;margin-top:29px;font-size:13px}
+@media(max-width:1066px){.stage{grid-template-columns:1fr}:root{--row:99px}.fit{font-size:30px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script src="pool.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개인정보 처리방침 · 타자 배틀로얄</title>
+<style>
+:root{color-scheme:light dark;--ink:#1f2937;--mute:#6b7280;--bg:#fafaf9;--line:#e5e7eb}
+@media(prefers-color-scheme:dark){:root{--ink:#e5e7eb;--mute:#9ca3af;--bg:#111315;--line:#2a2f35}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.75 system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+main{max-width:720px;margin:0 auto;padding:40px 20px 80px}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:18px;margin:34px 0 8px;padding-top:18px;border-top:1px solid var(--line)}
+p,li{color:var(--ink)}
+.mute{color:var(--mute);font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:15px}
+td,th{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+a{color:inherit}
+</style>
+</head>
+<body>
+<main>
+<h1>개인정보 처리방침</h1>
+<p class="mute">타자 배틀로얄 · 시행일 2026년 9월 19일</p>
+
+<p>타자 배틀로얄은 로그인하지 않아도 모든 게임을 할 수 있다. 카카오로 로그인하면 코인·스킨·랭크 기록을 남기기 위해 아래 정보만 저장한다.</p>
+
+<h2>1. 저장하는 정보와 목적</h2>
+<table>
+  <tr><th>항목</th><th>목적</th><th>보관 기간</th></tr>
+  <tr><td>카카오 회원번호</td><td>같은 사람인지 알아보는 로그인</td><td>탈퇴할 때까지</td></tr>
+  <tr><td>게임 닉네임</td><td>게임 화면과 랭크전 순위표에 표시(순위표는 누구나 볼 수 있다)</td><td>탈퇴할 때까지</td></tr>
+  <tr><td>코인·가진 스킨·장착 스킨·레이팅·랭크전 판 수</td><td>게임 기록</td><td>탈퇴할 때까지</td></tr>
+  <tr><td>날짜별 받은 코인, 같은 상대와 랭크전을 한 횟수</td><td>코인 하루 한도, 부계정 밀어주기 방지</td><td>코인 기록은 해당 계정의 다음 보상 지급 때, 랭크 상대 기록은 다음 랭크 정산 때 이전 날짜 기록을 삭제한다.</td></tr>
+  <tr><td>로그인 세션(암호화한 값)</td><td>로그인 유지</td><td>최대 30일, 로그아웃하면 바로 삭제</td></tr>
+</table>
+<p>카카오 프로필 이름·사진·이메일·전화번호는 받지 않는다. 로그인하지 않은 사람의 정보는 저장하지 않는다. 게스트 닉네임은 같은 방 사람에게만 보이고 저장하지 않는다.</p>
+
+<h2>2. 자동으로 다루는 정보</h2>
+<ul>
+  <li><b>접속 IP</b>: 요청 폭주를 막고(IP별 요청 수 제한), 한 사람이 여러 계정으로 랭크전을 짜고 치는 걸 막는 데만 쓴다. 게임 서버 메모리에서 해시로만 비교하고 저장하지 않는다.</li>
+  <li><b>서버 기록</b>: 사람이 칠 수 없는 속도로 문장을 완료하면 방 코드·내부 계정 번호·닉네임이 서버 로그에 남는다. Cloudflare가 정한 로그 보관 기간이 지나면 자동으로 지워진다. 호스팅 업체(Cloudflare)도 서비스 운영을 위해 접속 기록을 처리한다.</li>
+  <li><b>브라우저 저장소</b>: 로그인 상태, 닉네임, 소리·테마·언어 설정을 이 브라우저에만 저장한다. 쿠키는 쓰지 않는다.</li>
+</ul>
+
+<h2>3. 제3자 제공과 처리 위탁</h2>
+<p>저장한 정보를 다른 사람이나 회사에 팔거나 넘기지 않는다. 서버와 데이터베이스는 아래 업체의 서비스를 쓴다(국외 이전).</p>
+<table>
+  <tr><th>업체</th><th>하는 일</th><th>위치</th></tr>
+  <tr><td>Cloudflare, Inc.</td><td>게임 서버·데이터베이스 운영(Workers, Durable Objects, D1)</td><td>미국 등 Cloudflare 데이터센터</td></tr>
+  <tr><td>Kakao Corp.</td><td>로그인 확인(회원번호를 받는다)</td><td>대한민국</td></tr>
+</table>
+
+<h2>4. 탈퇴와 삭제</h2>
+<p>로그인한 상태에서 메뉴 위쪽의 <b>탈퇴</b>를 누르면 계정과 위 1번의 기록을 바로 모두 지운다. 되돌릴 수 없다. 카카오 쪽 연결은 카카오 계정 설정의 연결된 서비스 관리에서 끊을 수 있다.</p>
+<p>열람·정정·삭제·처리정지를 요청하거나 궁금한 게 있으면 <a href="https://github.com/nohseongmin/typing-royale/issues">GitHub 이슈</a>로 알려 달라. 제재된 계정의 삭제도 여기로 요청하면 된다.</p>
+
+<h2>5. 안전하게 다루는 방법</h2>
+<ul>
+  <li>로그인 세션은 원래 값 대신 해시만 저장한다. 데이터베이스가 새도 그대로 쓸 수 없다.</li>
+  <li>게임 화면은 같은 주소의 스크립트만 실행하도록 막아 두었다(Content-Security-Policy).</li>
+  <li>계정 하나에 살아 있는 로그인은 최근 5개만 남기고, 로그아웃하면 모든 기기에서 나간다.</li>
+</ul>
+
+<h2>6. 바뀌면</h2>
+<p>이 방침을 바꾸면 이 페이지에 시행일과 함께 올린다.</p>
+
+<p style="margin-top:40px"><a href="/">게임으로 돌아가기</a></p>
+</main>
+</body>
+</html>

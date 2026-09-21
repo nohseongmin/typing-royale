@@ -31,7 +31,7 @@ const REWARD_WIN = 20;         // 우승
 const DAILY_CAP = 600;         // 하루 최대(친구 계정으로 판을 돌리는 파밍 방지)
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-const kstDay = () => new Date(Date.now() + KST_OFFSET_MS).toISOString().slice(0, 10);
+export const kstDay = () => new Date(Date.now() + KST_OFFSET_MS).toISOString().slice(0, 10);
 
 export const rewardFor = (rank, players) =>
   REWARD_BASE + Math.max(0, players - rank) * REWARD_PER_BEATEN + (rank === 1 ? REWARD_WIN : 0);
@@ -44,19 +44,19 @@ export async function grantRewards(env, results) {
   for (const r of results) {
     if (!r.uid || granted.has(r.uid)) continue;   // 한 계정으로 탭 두 개 띄워도 한 번만
     const full = rewardFor(r.rank, r.players);
-    const today = await env.DB.prepare("SELECT earned FROM daily_coins WHERE user_id = ? AND day = ?").bind(r.uid, day).first();
-    const coins = Math.max(0, Math.min(full, DAILY_CAP - (today?.earned || 0)));
-    if (coins > 0) {
-      await env.DB.batch([
-        env.DB.prepare("UPDATE users SET coins = coins + ? WHERE id = ?").bind(coins, r.uid),
-        env.DB.prepare(
-          "INSERT INTO daily_coins (user_id, day, earned) VALUES (?, ?, ?) " +
-          "ON CONFLICT(user_id, day) DO UPDATE SET earned = earned + excluded.earned"
-        ).bind(r.uid, day, coins)
-      ]);
-    }
-    const user = await env.DB.prepare("SELECT coins FROM users WHERE id = ?").bind(r.uid).first();
-    granted.set(r.uid, {coins, total: user?.coins ?? 0, capped: coins < full});
+    // 한도 확인과 지급을 한 배치(트랜잭션)로 한다. 한 계정이 여러 방에서 동시에 끝나도 한도를 넘지 않는다.
+    const [, before, , , after] = await env.DB.batch([
+      env.DB.prepare("INSERT INTO daily_coins (user_id, day, earned) SELECT ?, ?, 0 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?) ON CONFLICT(user_id, day) DO NOTHING").bind(r.uid, day, r.uid),
+      env.DB.prepare("SELECT earned FROM daily_coins WHERE user_id = ? AND day = ?").bind(r.uid, day),
+      env.DB.prepare("UPDATE users SET coins = coins + MIN(?, ? - (SELECT earned FROM daily_coins WHERE user_id = ? AND day = ?)) WHERE id = ?")
+        .bind(full, DAILY_CAP, r.uid, day, r.uid),
+      env.DB.prepare("UPDATE daily_coins SET earned = MIN(?, earned + ?) WHERE user_id = ? AND day = ?").bind(DAILY_CAP, full, r.uid, day),
+      env.DB.prepare("SELECT coins FROM users WHERE id = ?").bind(r.uid),
+      env.DB.prepare("DELETE FROM daily_coins WHERE user_id = ? AND day < ?").bind(r.uid, day)   // 오늘 것만 쓴다. 날마다 한 줄씩 쌓아 두지 않는다
+    ]);
+    if (!after.results.length) continue; // 판이 끝나기 전에 탈퇴한 계정은 건너뛴다.
+    const coins = Math.max(0, Math.min(full, DAILY_CAP - (before.results[0]?.earned || 0)));
+    granted.set(r.uid, {coins, total: after.results[0]?.coins ?? 0, capped: coins < full});
   }
   return granted;
 }
