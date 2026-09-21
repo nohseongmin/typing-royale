@@ -522,6 +522,8 @@ export class Room {
         const line = msg.line.slice(0, MAX_LINE);
         if (!isPoolLine(line, this.lang)) return;
         if (line !== p.line) {
+          // 첫 문장 이후에는 이전 문장을 끝까지 진행한 뒤에만 다음 문장으로 넘어간다.
+          if (p.line && p.prog < 0.999) return;
           p.line = line;
           p.lineStrokes = Math.max(strokes(line), minLineStrokes(this.lang));
           p.prog = 0;   // 새 문장이면 진행도를 처음부터
@@ -533,7 +535,9 @@ export class Room {
       const lineStrokes = p.lineStrokes || minLineStrokes(this.lang);
       const cap = p.prog + (now - p.progAt) / 1000 * MAX_STROKES_PER_SEC / lineStrokes;
       p.progAt = now;
-      p.prog = Math.max(0, Math.min(1, cap, +msg.prog || 0));
+      const reported = Number(msg.prog);
+      if (!Number.isFinite(reported) || reported < p.prog) return;
+      p.prog = Math.max(0, Math.min(1, cap, reported));
       p.pos = Math.max(0, Math.min(p.line.length, msg.pos | 0));
       p.bad = !!msg.bad;
       return;

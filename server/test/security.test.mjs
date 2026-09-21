@@ -139,4 +139,5 @@ test('server source does not trust client fire bonuses and requires full progres
   const source = readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
   assert.match(source, /p\.prog < 0\.999/);
   assert.doesNotMatch(source, /Math\.max\(0, Math\.min\(MAX_FIRE_BONUS/);
+  assert.match(source, /reported < p\.prog/);
 });
