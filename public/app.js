@@ -341,7 +341,10 @@ class Net{
     this.ws.onopen = () => this.h.open && this.h.open();
     this.ws.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (this.h[m.t]) this.h[m.t](m);
+      if (!m || typeof m !== 'object' || typeof m.t !== 'string') return;
+      if (!Object.hasOwn(this.h, m.t)) return;
+      const handler = this.h[m.t];
+      if (typeof handler === 'function') handler(m);
     };
     this.ws.onerror = () => this.h.fail && this.h.fail();
     this.ws.onclose = () => this.h.gone && this.h.gone();
