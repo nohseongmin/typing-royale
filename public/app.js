@@ -15,32 +15,7 @@ const HANGUL = /[\u3131-\u318E\uAC00-\uD7A3]/, LATIN = /[A-Za-z]/;
 
 /* 두벌식 자판에서 누르는 키 순서로 푼다. 겹모음(ㅘ)·겹받침(ㄺ)은 두 키다.
    타수 계산과, 조합 중인 글자가 목표의 올바른 앞부분인지(갇 → 가다) 판정에 같이 쓴다. */
-const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
-const JUNG = ["ㅏ","ㅐ","ㅑ","ㅒ","ㅓ","ㅔ","ㅕ","ㅖ","ㅗ","ㅗㅏ","ㅗㅐ","ㅗㅣ","ㅛ","ㅜ","ㅜㅓ","ㅜㅔ","ㅜㅣ","ㅠ","ㅡ","ㅡㅣ","ㅣ"];
-const JONG = ["","ㄱ","ㄲ","ㄱㅅ","ㄴ","ㄴㅈ","ㄴㅎ","ㄷ","ㄹ","ㄹㄱ","ㄹㅁ","ㄹㅂ","ㄹㅅ","ㄹㅌ","ㄹㅍ","ㄹㅎ","ㅁ","ㅂ","ㅂㅅ","ㅅ","ㅆ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
-const COMPAT_SPLIT = {"ㅘ":"ㅗㅏ","ㅙ":"ㅗㅐ","ㅚ":"ㅗㅣ","ㅝ":"ㅜㅓ","ㅞ":"ㅜㅔ","ㅟ":"ㅜㅣ","ㅢ":"ㅡㅣ",
-  "ㄳ":"ㄱㅅ","ㄵ":"ㄴㅈ","ㄶ":"ㄴㅎ","ㄺ":"ㄹㄱ","ㄻ":"ㄹㅁ","ㄼ":"ㄹㅂ","ㄽ":"ㄹㅅ","ㄾ":"ㄹㅌ","ㄿ":"ㄹㅍ","ㅀ":"ㄹㅎ","ㅄ":"ㅂㅅ"};
-function keys(str){
-  let out = "";
-  for (const ch of str){
-    const c = ch.charCodeAt(0) - 0xAC00;
-    if (c < 0 || c > 11171){ out += COMPAT_SPLIT[ch] || ch; continue; }
-    out += CHO[Math.floor(c / 588)] + JUNG[Math.floor(c / 28) % 21] + JONG[c % 28];
-  }
-  return out;
-}
-const strokes = str => keys(str).length;
-
-/* 처음 틀린 글자 위치(없으면 -1). 조합 중인 마지막 글자는 자모 단위로 앞부분만 맞으면 통과다. */
-function firstWrong(typed, target, composing){
-  for (let i = 0; i < typed.length; i++){
-    const ok = composing && i === typed.length - 1
-      ? keys(target.slice(i)).startsWith(keys(typed[i]))
-      : typed[i] === target[i];
-    if (!ok) return i;
-  }
-  return -1;
-}
+const {keys, strokes, firstWrong, MAX_HITS, SAFE_WORDS, makeLine, lineText, wordAt, corrupt, ATTACK_NAMES, unpackLine} = TR_COMBAT;
 
 /* 한글 한 글자는 두벌식으로 평균 2.4타, 영문은 1타. 봇 속도와 2연타 판정을 언어와 무관하게 타수로 맞춘다. */
 const KO_STROKES_PER_CHAR = 2.4;
@@ -49,92 +24,7 @@ const strokesPerChar = () => CFG.lang === "en" ? 1 : KO_STROKES_PER_CHAR;
 const sentences = () => CFG.lang === "en" ? POOL_EN : POOL_KO;
 
 /* ===================== 문장 & 공격 ===================== */
-const MAX_HITS = 2;      // 한 문장이 받을 수 있는 최대 공격 수
-const SAFE_WORDS = 2;    // 지금 치는 어절에서 이만큼 뒤부터만 공격 가능
-
-function makeLine(entry){
-  // swapped/shuffled: 이미 순서섞기·애너그램 당한 어절. 같은 공격이 두 번 들어가면 원래대로 돌아올 수 있다.
-  // inserted: 끼워 넣은 신조어 자리 / slots: 이 문장에서 아직 쓸 수 있는 신조어 자리
-  return {src:entry.text, words:entry.text.split(" "), slots:entry.slots.slice(), tags:[], hits:0,
-          dirty:new Set(), swapped:new Set(), shuffled:new Set(), inserted:new Set(), v:0};
-}
-const lineText = l => l.words.join(" ");
-
-/* 커서 위치가 몇 번째 어절인지 */
-function wordAt(line, pos){
-  let n = 0, seen = 0;
-  for (const w of line.words){
-    seen += w.length;
-    if (pos <= seen) return n;
-    seen += 1; n++;
-  }
-  return line.words.length - 1;
-}
-/* 어절을 끼워 넣으면 그 뒤 표시들의 위치도 한 칸씩 민다 */
-function shiftMarks(line, from){
-  const shift = set => new Set([...set].map(d => d >= from ? d + 1 : d));
-  line.dirty = shift(line.dirty); line.swapped = shift(line.swapped);
-  line.shuffled = shift(line.shuffled); line.inserted = shift(line.inserted);
-}
-
-function atkAnagram(l, min){
-  const cand = l.words.map((w,i)=>i).filter(i => i >= min && l.words[i].length >= 3 && !l.shuffled.has(i));
-  if (!cand.length) return false;
-  const i = pick(cand), src = l.words[i];
-  for (let t=0; t<24; t++){
-    const a = [...src];
-    for (let k=a.length-1; k>0; k--){ const j = rnd(k+1); [a[k],a[j]] = [a[j],a[k]]; }
-    if (a.join("") !== src){ l.words[i] = a.join(""); l.dirty.add(i); l.shuffled.add(i); return true; }
-  }
-  return false;
-}
-function atkInsert(l, min){
-  const cand = [];
-  for (const o of l.slots){
-    // 이미 끼운 신조어 바로 뒤에는 또 안 넣는다(신조어 연타 방지)
-    const i = l.words.findIndex((w, k) => k >= Math.max(min, 1) && w === o.before && !l.inserted.has(k - 1));
-    if (i >= 0) cand.push([i, o]);
-  }
-  if (!cand.length) return false;
-  const [i, o] = pick(cand);
-  l.words.splice(i, 0, o.word);
-  shiftMarks(l, i); l.dirty.add(i); l.inserted.add(i);
-  l.slots = l.slots.filter(x => x.before !== o.before);   // 같은 자리엔 한 번만
-  return true;
-}
-function atkReorder(l, min){
-  const cand = [];
-  for (let i = Math.max(min,0); i < l.words.length - 1; i++){
-    if (!l.swapped.has(i) && !l.swapped.has(i+1)) cand.push(i);   // 한 번 바뀐 어절은 다시 안 바꾼다
-  }
-  if (!cand.length) return false;
-  const i = pick(cand);
-  [l.words[i], l.words[i+1]] = [l.words[i+1], l.words[i]];
-  l.dirty.add(i); l.dirty.add(i+1); l.swapped.add(i); l.swapped.add(i+1);
-  // 애너그램·신조어 표시는 어절을 따라간다. 안 옮기면 신조어 연타 방지 판정이 엉뚱한 어절을 본다.
-  for (const set of [l.shuffled, l.inserted]){
-    const a = set.has(i), b = set.has(i+1);
-    set.delete(i); set.delete(i+1);
-    if (a) set.add(i+1);
-    if (b) set.add(i);
-  }
-  return true;
-}
-const ATTACKS = {anagram:atkAnagram, insert:atkInsert, reorder:atkReorder};
-const ATTACK_NAMES = {anagram:"애너그램", insert:"끼워넣기", reorder:"순서섞기"};
-
-/* 한 종류가 안 먹으면 다른 종류로 대체 */
-function corrupt(line, min, kind){
-  const order = [kind, ...Object.keys(ATTACKS).filter(k => k !== kind)];
-  for (const k of order){
-    if (ATTACKS[k](line, min)){
-      line.hits++; line.v++;
-      if (!line.tags.includes(k)) line.tags.push(k);
-      return k;
-    }
-  }
-  return null;
-}
+// 타자·공격 규칙은 combat.js에서 공유한다.
 
 /* ===================== 플레이어 ===================== */
 let G = null;
@@ -201,15 +91,15 @@ class Player{
   complete(){
     const txt = this.text;
     const secs = (performance.now() - this.startedAt) / 1000;
+    if (G.online){
+      if (G.pending) return;
+      G.pending = true;
+      G.net.send({t:"done", index:this.idx, version:this.line.v, text:txt});
+      return;
+    }
     this.done++; this.strokes += strokes(txt);
     this.idx++; this.typed = ""; this.locked = 0; this.startedAt = performance.now();
     this.fill();
-    if (G.online){
-      // 공격 종류와 발수는 서버가 정한다
-      G.net.send({t:"done", ms: Math.round(secs*1000), fire: this === G.me ? fireTier(this.streak) : 0});
-      G.slide = true;
-      return;
-    }
     const fast = txt.length * strokesPerChar() / Math.max(secs, .1) > FAST_STROKES_PER_SEC;
     const n = (fast ? 2 : 1) + (this === G.me ? fireTier(this.streak) : 0);   // 불붙으면 공격이 늘어난다
     for (let i=0;i<n;i++) sendAttack(this);
@@ -229,7 +119,7 @@ function sendAttack(from){
   if (!foes.length) return;
   let target = (from === G.me && G.target) ? foes.find(p => p.id === G.target) : null;
   if (!target) target = Math.random() < .45 ? foes.slice().sort((a,b)=>b.score-a.score)[0] : pick(foes);
-  const applied = target.hit(pick(Object.keys(ATTACKS)), from);
+  const applied = target.hit(pick(Object.keys(ATTACK_NAMES)), from);
   if (from === G.me && applied) launch(target.id, applied);
 }
 
@@ -437,7 +327,7 @@ const sndLabel = () => SFX.muted ? "소리 끔" : "소리 켬";
    Cloudflare Worker + Durable Object. 방 하나가 DO 인스턴스 하나다.
    게임 화면도 같은 워커가 내보내서 서버 주소는 이 페이지 주소다. 파일로 열면(file://) 연습 모드만 된다. */
 const SERVER = /^https?:$/.test(location.protocol) ? location.origin : "";
-const WS_PROTOCOL = "tr.v1";   // 서버와 같은 값
+const WS_PROTOCOL = "tr.v2";   // 서버와 같은 값
 const httpBase = () => SERVER;
 const wsBase   = () => SERVER.replace(/^http/, "ws");
 
@@ -981,7 +871,7 @@ function lobby(code, name, auto, retry = 0){
       }
       menuError(m.reason);
     },
-    start: m => { clearInterval(tick); start({net, code, you: lobby.you, countdown: m.countdown}); },
+    start: m => { clearInterval(tick); start({net, code, you: lobby.you, countdown: m.countdown, queue:m.queue}); },
     solo: () => { clearInterval(tick); net.close(); toast("상대가 없어서 봇전으로 시작한다"); start({}); },
     fail: () => { clearInterval(tick); menuError("서버에 연결하지 못했다"); },
     gone: () => { if (!G || !G.running){ clearInterval(tick); menuError("서버 연결이 끊겼다"); } }
@@ -1001,8 +891,9 @@ function start(opts){
   const base = DIFF[CFG.diff].cps;
   G = {players:[], me:null, target:null, running:true, nextElim:0, t0:0,
        tick:null, composing:false, committing:false, slide:false, sliding:false, rebuild:false, ver:-1, spans:[], hadErr:false,
-       net, online:!!net, code:opts.code || null, sentProg:0, sentKey:"", spectating:false, goAt:0, watchOrder:""};
+       net, online:!!net, code:opts.code || null, sentProg:0, sentKey:"", spectating:false, pending:false, goAt:0, watchOrder:""};
   G.me = new Player(opts.you || "me", "나", false);
+  if (G.online) G.me.queue = opts.queue.map(unpackLine);
   G.players.push(G.me);
   if (!G.online){
     for (let i=0;i<CFG.bots;i++){
@@ -1037,7 +928,33 @@ function wireGame(net){
       G.players = G.players.filter(p => p === G.me || seen.has(p.id));
       if (m.elimIn) G.nextElim = performance.now() + m.elimIn;
     },
-    atk: m => G.me.hit(m.kind, {name: m.from}),
+    sentence: m => {
+      const me = G.me;
+      if (m.index < me.idx) return;
+      const advanced = m.index > me.idx;
+      me.idx = m.index; me.done = m.index;
+      me.queue.splice(me.idx, me.queue.length - me.idx, ...m.queue.map(unpackLine));
+      if (advanced){
+        me.typed = ""; me.locked = 0; me.startedAt = performance.now();
+        me.strokes = m.spent; G.pending = false; G.slide = true;
+        $("#type").value = "";
+        setStreak(me, m.streak);
+      } else if (m.rejected){
+        let prefix = 0;
+        while (prefix < me.typed.length && me.typed[prefix] === me.text[prefix]) prefix++;
+        // 완성 문자열의 속도 검증이 거절되면 마지막 글자를 다시 입력해 재시도한다.
+        prefix = Math.min(prefix, me.text.length - 1);
+        me.typed = me.text.slice(0, prefix); me.locked = prefix;
+        $("#type").value = me.typed; G.pending = false;
+        setStreak(me, m.streak); toast(m.reason);
+      }
+      G.rebuild = true;
+      if (m.attack){
+        SFX.hit(); bump("#app", "jolt"); bump("#board", "flash");
+        feed(`${m.attack.from} → 나 · ${ATTACK_NAMES[m.attack.kind]}`, "dmg");
+        toast(ATTACK_NAMES[m.attack.kind], "atk");
+      }
+    },
     sent: m => { SFX.atk(); feed(`나 → ${m.to} · ${ATTACK_NAMES[m.kind]}`, "me"); if (m.toId) launch(m.toId, m.kind); },
     out: m => {
       feed(`${m.name} 탈락 · ${m.rank}위`, "out");
@@ -1117,7 +1034,7 @@ function renderGame(){
     const me = G.me;
     // 포커스가 입력칸을 떠나지 않게 막고 공격 대상만 돌린다
     if (e.key === "Tab"){ e.preventDefault(); cycleTarget(e.shiftKey ? -1 : 1); return; }
-    if (performance.now() < G.goAt){ e.preventDefault(); return; }   // 카운트다운 중에는 못 친다
+    if (performance.now() < G.goAt || G.pending){ e.preventDefault(); return; }
     // 틀린 글자를 고치기 전엔 다음 글자로 못 간다. 한글 IME 입력은 keydown으로 못 막아서 onInput에서 잘라낸다.
     if (!e.isComposing && e.key.length === 1 && firstWrong(me.typed, me.text, false) >= 0){
       e.preventDefault(); me.keys++; SFX.err(); return;
@@ -1155,6 +1072,7 @@ function endComposition(){
 function onInput(){
   if (!G || !G.running || !G.me.alive) return;
   const inp = $("#type"), me = G.me, t = me.text;
+  if (G.pending){ inp.value = me.typed; return; }
   if (performance.now() < G.goAt){ if (G.composing) endComposition(); else inp.value = ""; return; }
   let v = inp.value;
   let w = firstWrong(v, t, G.composing);
@@ -1176,7 +1094,7 @@ function onInput(){
   me.typed = w >= 0 ? v.slice(0, w + 1) : v;
   if (!G.composing && v === t){
     me.complete();
-    inp.value = ""; me.typed = "";
+    if (!G.online){ inp.value = ""; me.typed = ""; }
   }
 }
 
@@ -1252,12 +1170,10 @@ function loop(){
   }
 
   if (G.online){
-    // 진행도와 지금 치는 문장을 신고한다. 서버는 순위를 매기고 다른 사람 화면에 뿌린다.
-    // 문장 전체는 바뀔 때만 보내고 평소엔 커서 위치만 보낸다.
+    // 입력 문자열만 보낸다. 서버가 배정한 문장과 대조해 진행도를 계산한다.
     if (G.me.alive && now >= G.goAt && now - G.sentProg > 200){
       G.sentProg = now;
-      const me = G.me, msg = {t:"prog", done:me.done, prog:me.progress, pos:me.typed.length, bad:firstWrong(me.typed, me.text, G.composing) >= 0};
-      if (G.sentKey !== rowKey()){ G.sentKey = rowKey(); msg.line = me.text; msg.dt = [...me.line.dirty]; }
+      const me = G.me, msg = {t:"prog", index:me.idx, text:me.typed, composing:G.composing};
       G.net.send(msg);
     }
   } else if (now >= G.nextElim){

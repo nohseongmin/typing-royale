@@ -1,5 +1,6 @@
 # 게임 화면 보안 헤더. 스크립트는 같은 주소 파일만, 외부는 글꼴 CSS·글꼴 파일만 허용한다.
 /*
+  Cache-Control: no-cache
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' wss://typing-royale.typing-royale-server.workers.dev; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

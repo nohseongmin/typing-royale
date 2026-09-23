@@ -4,9 +4,8 @@
  * 방 하나가 Durable Object 인스턴스 하나다. 끄투가 Node 게임서버 메모리에 방 객체를
  * 들고 있는 것과 같은 구조인데, 프로세스를 우리가 관리하지 않는다는 점만 다르다.
  *
- * 서버는 심판만 본다. 문장 생성과 오염은 각 클라이언트가 자기 화면에서 처리하고,
- * 서버는 진행도를 모아 순위를 매기고 탈락을 선고하며 공격을 중계한다.
- * 각자 치고 있는 문장과 커서 위치도 받아서 다른 사람 화면(상대 카드·관전)에 뿌린다.
+ * 서버가 문장을 배정하고 공격으로 바꾸며, 입력 내용과 문장 번호를 검사해 완료를 인정한다.
+ * 서버가 계산한 진행도와 문장을 다른 사람 화면(상대 카드·관전)에 뿌린다.
  * 게임 화면(public/)도 이 워커가 같은 주소에서 내보낸다(wrangler.toml [assets]).
  *
  * 빠른 시작은 Matchmaker(전역 DO 하나)가 대기 중인 방 중 사람이 가장 많은 곳으로 보낸다.
@@ -21,7 +20,10 @@ import {handleAuth, userFromToken, cleanNick, bearer} from "./auth.js";
 import {nickAllowed} from "./nickname.js";
 import {handleShop, grantRewards} from "./shop.js";
 import {handleRank, applyRatings} from "./rank.js";
-import {strokes, isPoolLine, minLineStrokes, withinHumanPace, MAX_STROKES_PER_SEC, SUSPECT_STRIKES} from "./anticheat.js";
+import {withinHumanPace, SUSPECT_STRIKES} from "./anticheat.js";
+import "../../public/pool.js";
+import "../../public/combat.js";
+const {strokes, firstWrong, makeLine, lineText, wordAt, corrupt, packLine, MAX_HITS, SAFE_WORDS} = globalThis.TR_COMBAT;
 
 const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 2;
@@ -40,7 +42,6 @@ const MAX_SOCKETS_PER_IP = 20;  // 서비스 전체에서 IP 하나가 동시에
 const MAX_SAME_IP_PUBLIC = 4;   // 빠른 시작·랭크전 방 하나에 같은 IP는 이만큼만(PC방 친구 몇 명은 들어오게)
 const FAST_MS = 12000;          // 문장을 이보다 빨리 끝내면 한 발 더
 const MAX_LINE = 160;           // 중계하는 문장 길이 상한(신조어가 다 박혀도 이보다 짧다)
-const MAX_DIRTY = 40;
 const MAX_MSGS_PER_SEC = 20;    // 클라이언트는 초당 5번쯤 보낸다. 이걸 넘기면 끊는다
 const MAX_BURST_MSGS = MAX_MSGS_PER_SEC * 5; // 네트워크 지연으로 한꺼번에 도착하는 정상 입력은 버퍼 여유를 둔다.
 const MAX_MSG_CHARS = 2048;
@@ -48,7 +49,7 @@ const MAX_JSON_BYTES = 2048;
 const ROOM_CODE_LEN = 6;
 const KINDS = ["anagram", "insert", "reorder"];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";  // 헷갈리는 I,O,0,1 제외
-const WS_PROTOCOL = "tr.v1";
+const WS_PROTOCOL = "tr.v2";
 const WS_AUTH_PREFIX = "auth."; // 로그인 토큰은 주소 대신 서브프로토콜 헤더로 받는다. 주소는 로그에 남는다.
 // IP별 요청 제한(wrangler.toml [[ratelimits]] RL). 경로 묶음마다 따로 센다. 메뉴의 접속자 수 조회가 입장을 막지 않게.
 const RATE_BUCKETS = {
@@ -88,7 +89,8 @@ function denySocket(request, reason) {
   pair[1].accept();
   pair[1].send(JSON.stringify({t: "denied", reason}));
   pair[1].close(1008, "denied");
-  const headers = wsProtocols(request).includes(WS_PROTOCOL) ? {"Sec-WebSocket-Protocol": WS_PROTOCOL} : {};
+  const protocol = wsProtocols(request).find(p => /^tr\.v\d+$/.test(p));
+  const headers = protocol ? {"Sec-WebSocket-Protocol": protocol} : {};
   return new Response(null, {status: 101, webSocket: pair[0], headers});
 }
 
@@ -133,6 +135,7 @@ export default {
       request = new Request(request, {body: JSON.stringify(body)});
     }
 
+    if (isSocket && !wsProtocols(request).includes(WS_PROTOCOL)) return denySocket(request, "게임이 업데이트됐다. 새로고침 후 다시 입장해라");
     const authResponse = await handleAuth(request, env, url, json);
     if (authResponse) return authResponse;
 
@@ -495,7 +498,10 @@ export class Room {
     this.startedWith = this.players.size;
     this.departed = [];
     this.playStartedAt = 0;   // 지난 판 값이 남으면 3·2·1 중에 끝난 판도 끝까지 한 판으로 친다
-    this.broadcast({t: "start", countdown: COUNTDOWN_MS});
+    for (const p of this.players.values()) {
+      this.initSentences(p);
+      this.send(p.ws, {t: "start", countdown: COUNTDOWN_MS, queue: p.queue.map(packLine)});
+    }
     this.report();
     this.startTimer = setTimeout(() => {
       this.phase = "playing";
@@ -513,33 +519,44 @@ export class Room {
     }, COUNTDOWN_MS);
   }
 
+  initSentences(p) {
+    p.queue = []; p.streak = 0;
+    this.fillSentences(p);
+    this.currentSentence(p);
+  }
+
+  fillSentences(p) {
+    const pool = globalThis.TR_POOL[this.lang];
+    while (p.queue.length < 4) {
+      let entry, attempts = 0;
+      do { entry = pool[Math.floor(Math.random() * pool.length)]; attempts++; }
+      while (attempts < 8 && p.queue.some(l => l.src === entry.text));
+      p.queue.push(makeLine(entry));
+    }
+  }
+
+  currentSentence(p) {
+    p.line = lineText(p.queue[0]);
+    p.lineStrokes = strokes(p.line);
+    p.dt = [...p.queue[0].dirty];
+  }
+
+  syncSentence(p, extra = {}) {
+    this.send(p.ws, {t: "sentence", index: p.done, queue: p.queue.map(packLine),
+      streak: p.streak, spent: p.spent, ...extra});
+  }
+
   onMessage(p, msg) {
     if (msg.t === "prog") {
-      if (this.phase !== "playing" || !p.alive) return;
+      if (this.phase !== "playing" || !p.alive || msg.index !== p.done || typeof msg.text !== "string" || msg.text.length > MAX_LINE) return;
       const now = Date.now();
-      if (typeof msg.line === "string") {
-        // 풀에 있는 문장(공격으로 망가진 것 포함)만 받는다. 아무 글이나 상대 화면에 띄우는 통로가 되지 않게.
-        const line = msg.line.slice(0, MAX_LINE);
-        if (!isPoolLine(line, this.lang)) return;
-        if (line !== p.line) {
-          // 첫 문장 이후에는 이전 문장을 끝까지 진행한 뒤에만 다음 문장으로 넘어간다.
-          if (p.line && p.prog < 0.999) return;
-          p.line = line;
-          p.lineStrokes = Math.max(strokes(line), minLineStrokes(this.lang));
-          p.prog = 0;   // 새 문장이면 진행도를 처음부터
-        }
-        const words = line.split(" ").length;
-        p.dt = Array.isArray(msg.dt) ? msg.dt.filter(i => Number.isInteger(i) && i >= 0 && i < words).slice(0, MAX_DIRTY) : [];
-      }
-      // 진행도는 사람이 칠 수 있는 속도 이상으로 오르지 못한다
-      const lineStrokes = p.lineStrokes || minLineStrokes(this.lang);
-      const cap = p.prog + (now - p.progAt) / 1000 * MAX_STROKES_PER_SEC / lineStrokes;
-      p.progAt = now;
-      const reported = Number(msg.prog);
-      if (!Number.isFinite(reported) || reported < p.prog) return;
-      p.prog = Math.max(0, Math.min(1, cap, reported));
-      p.pos = Math.max(0, Math.min(p.line.length, msg.pos | 0));
-      p.bad = !!msg.bad;
+      const wrong = firstWrong(msg.text, p.line, msg.composing === true);
+      const pos = wrong >= 0 ? wrong : Math.max(0, msg.text.length - (msg.composing === true ? 1 : 0));
+      if (pos < p.pos || !withinHumanPace(p.spent + strokes(p.line.slice(0, pos)), now - this.playStartedAt)) return;
+      p.bad = wrong >= 0;
+      p.streak = p.bad ? 0 : p.streak + strokes(p.line.slice(p.pos, pos));
+      p.pos = pos;
+      p.prog = p.pos / p.line.length;
       return;
     }
     if (msg.t === "aim") {
@@ -567,8 +584,12 @@ export class Room {
       return;
     }
     if (msg.t === "done" && this.phase === "playing" && p.alive) {
-      // 완료는 문장 하나에 한 번이다. 지금 치는 문장을 알려 준 적이 없거나 이미 끝낸 문장이면 무시한다.
-      if (!p.line || p.line === p.doneLine || p.prog < 0.999) return;
+      // 서버 문장 번호·버전·전체 내용이 맞아야 한 번만 인정한다.
+      if (!p.queue || msg.index !== p.done) return;
+      if (msg.version !== p.queue[0].v || msg.text !== p.line) {
+        this.syncSentence(p, {rejected: true, reason: "문장이 바뀌었다. 표시된 문장을 마저 입력해라"});
+        return;
+      }
       const now = Date.now();
       // 판이 시작된 뒤 끝낸 문장들의 타수를 다 더해서 사람 속도 안인지 본다. 렉으로 신고가 몰려 와도 걸리지 않는다.
       if (!withinHumanPace(p.spent + p.lineStrokes, now - this.playStartedAt)) {
@@ -577,16 +598,19 @@ export class Room {
           p.suspect = true;
           console.warn("too-fast completions; ranked as last and no coins:", this.code, p.id, p.uid, p.name);
         }
+        this.syncSentence(p, {rejected: true, reason: "입력 속도를 확인하지 못했다. 잠시 후 다시 입력해라"});
         return;
       }
+      p.streak += strokes(p.line.slice(p.pos));
       p.spent += p.lineStrokes;
-      p.doneLine = p.line;
       p.done++;
-      // 빠르기는 서버 시계로 잰다. 불붙음은 서버가 못 보는 값이라 상한만 둔다.
+      // 시간과 인정된 입력으로 서버가 공격 발수를 계산한다.
       const fast = now - p.lastDoneAt < FAST_MS;
       p.lastDoneAt = now;
-      // 온라인 판정은 클라이언트의 streak/fire 값을 신뢰하지 않는다.
-      const shots = fast ? 2 : 1;
+      const shots = (fast ? 2 : 1) + (p.streak >= 120 ? 2 : p.streak >= 40 ? 1 : 0);
+      p.queue.shift(); this.fillSentences(p); this.currentSentence(p);
+      p.pos = 0; p.prog = 0; p.bad = false;
+      this.syncSentence(p, {accepted: true});
       for (let i = 0; i < shots; i++) this.fire(p);
     }
   }
@@ -601,8 +625,16 @@ export class Room {
         : foes[Math.floor(Math.random() * foes.length)];
     }
     const kind = KINDS[Math.floor(Math.random() * KINDS.length)];
-    this.send(target.ws, {t: "atk", from: from.name, kind});
-    this.send(from.ws, {t: "sent", to: target.name, toId: target.id, kind});
+    const safe = wordAt(target.queue[0], target.pos) + SAFE_WORDS;
+    const slots = target.queue.map((line, i) => [line, i === 0 ? safe : 0]);
+    let applied = null;
+    for (const [line, min] of slots) if (line.hits < MAX_HITS && (applied = corrupt(line, min, kind))) break;
+    if (!applied) for (const [line, min] of slots) if ((applied = corrupt(line, min, kind))) break;
+    if (!applied) return;
+    this.currentSentence(target);
+    target.prog = target.pos / target.line.length;
+    this.syncSentence(target, {attack: {from: from.name, kind: applied}});
+    this.send(from.ws, {t: "sent", to: target.name, toId: target.id, kind: applied});
   }
 
   eliminate() {
