@@ -1,0 +1,71 @@
+/* Layout/typography reference: https://github.com/tasteskill/tasteskill (MIT).
+   Keep the existing vanilla UI and semantic combat colors. */
+:root{--bg:#fafaf7;--soft:#f0f1eb;--soft2:#e7eae1;--line:#dedfd7;--ink:#252d27;--mute:#737b72;--dim:#b4bcb3;--acc:#378362}
+:root[data-theme="dark"]{--bg:#171c19;--soft:#202722;--soft2:#2b352d;--line:#354037;--ink:#e7ece5;--mute:#a0ad9f;--dim:#59675b}
+body{height:auto;min-height:100dvh;padding:36px 48px}
+button,input,a{-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
+.btn,.btn.ghost{border-radius:10px;box-shadow:none;font-size:18px;padding:17px 28px}
+.btn.rankbtn{background:var(--ink);color:var(--bg);box-shadow:none}
+.btn.ghost{color:var(--ink);border:1px solid var(--line);background:transparent}
+button:active{transform:translateY(1px)}
+.snd{border-radius:7px;background:transparent;color:var(--mute);font-size:14px;padding:10px 12px}
+.seg{gap:4px;padding:4px;border-radius:9px;background:var(--soft)}
+.seg button{border-radius:6px;background:transparent;padding:10px 15px;font-size:16px;color:var(--mute)}
+.seg button.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 3px #18241b15;border-color:var(--line)}
+.field input{border-radius:8px;border-color:var(--line);background:var(--bg);padding:14px 16px;font-size:17px}
+.field input::placeholder{color:var(--mute);opacity:.8}
+.field .btn{padding:14px 22px;font-size:17px}
+.home{max-width:1240px;margin:auto;padding:0;text-align:left}
+.home-nav{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-bottom:26px;border-bottom:1px solid var(--line)}
+.wordmark{display:flex;align-items:center;gap:12px;font-weight:750;font-size:18px;letter-spacing:-.6px;white-space:nowrap}
+.keymark{display:grid;place-items:center;width:35px;height:35px;border:1px solid var(--ink);border-bottom-width:3px;border-radius:7px;font-size:22px;font-weight:700}
+.home-tools{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+.home-layout{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:70px;align-items:center;padding:64px 0}
+.home-intro .kicker{color:var(--acc);font-size:13px;letter-spacing:1px}
+.home h1{font-size:clamp(34px,3.8vw,52px);letter-spacing:-2px;font-weight:750;line-height:1.28;margin:20px 0 23px;word-break:keep-all}
+.home h1 em{font-style:normal;color:var(--acc)}
+.home-copy{font-size:17px;color:var(--mute);line-height:1.85;word-break:keep-all}
+.sentence-demo{margin:42px 0 24px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:19px 0 20px}
+.demo-label{font-size:12px;color:var(--mute);display:flex;justify-content:space-between;gap:10px}
+.demo-label span{color:var(--dmg-ink)}
+.sentence-demo p{font-size:clamp(22px,2.4vw,31px);letter-spacing:-.7px;font-weight:600;margin:23px 0;line-height:1.7;word-break:keep-all}
+.sentence-demo mark{background:var(--pink-soft);color:var(--dmg-ink);padding:3px 7px;border-radius:4px}
+.demo-caret{display:inline-block;height:1em;border-right:2px solid var(--acc);margin-left:4px;vertical-align:-2px}
+.demo-caption{font-size:13px;color:var(--mute)}
+.home-meta{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--mute)}
+.home-meta span::before{content:'·';margin-right:7px;color:var(--acc)}
+.play-panel{padding:29px;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 36px #263b2710}
+.panel-heading h2{font-size:23px;letter-spacing:-.8px;font-weight:750}
+.panel-heading .online{font-size:12px;margin:9px 0 20px;color:var(--mute);min-height:18px}
+.panel-heading .online::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-right:7px}
+.play-panel .account:empty{display:none}
+.play-panel .account{margin:0 0 15px;font-size:13px}
+.play-panel .modebar{display:flex;justify-content:space-between;gap:12px;margin-bottom:25px}
+.play-panel #segMode{flex:1}
+.play-panel #segMode button{flex:1;padding:10px 8px;font-size:14px;white-space:nowrap}
+.play-panel #segLang button{padding:10px 7px;font-size:13px}
+.input-label{display:block;font-size:13px;font-weight:650;margin-bottom:9px}
+.join-divider{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--mute);margin:25px 0 19px}
+.join-divider::before,.join-divider::after{content:'';height:1px;background:var(--line);flex:1}
+.play-panel .err{font-size:13px;text-align:left;min-height:0;line-height:1.6}
+.play-panel .err:empty{margin:0}
+.play-panel .opts{margin:0 0 25px;gap:24px;justify-content:flex-start}
+.play-panel #go{width:100%}
+.rules-strip{display:grid;grid-template-columns:1.1fr repeat(3,1fr);border-top:1px solid var(--line);padding:30px 0;gap:32px}
+.rules-title .kicker{font-size:10px;letter-spacing:1.5px}
+.rules-title h2{font-size:20px;letter-spacing:-.6px;line-height:1.5;margin-top:12px;font-weight:650}
+.rule{padding-left:24px;border-left:1px solid var(--line)}
+.rule-number{display:block;color:var(--mute);font:12px ui-monospace,monospace;margin-bottom:17px}
+.rule b{font-size:16px;font-weight:650}
+.rule p{font-size:12px;color:var(--mute);margin-top:7px}
+.rule .ex{font-size:13px;margin-top:15px;color:var(--dmg-ink);line-height:1.6;word-break:keep-all}
+.home-footer{display:flex;justify-content:space-between;gap:20px;border-top:1px solid var(--line);padding-top:20px;color:var(--mute);font-size:12px}
+.home-footer .foot{margin:0;font-size:12px}
+.board{border-radius:14px}.board::before{border-radius:8px}
+.hud{padding-bottom:22px;border-bottom:1px solid var(--line)}
+.stat b{font-weight:650}.stat u{font-size:12px}
+.slot,.foe{border-radius:9px}
+@media(max-width:1050px){body{padding:28px}.home-layout{grid-template-columns:minmax(0,1fr) 380px;gap:32px;padding:42px 0}.play-panel{padding:23px}.rules-strip{gap:18px}.rule{padding-left:18px}.hud{flex-wrap:wrap}}
+@media(max-width:760px){body{padding:20px;align-items:flex-start}.home-nav{align-items:flex-start;gap:12px}.wordmark{font-size:15px;gap:8px}.keymark{width:29px;height:29px}.home-tools{gap:0}.home-tools .snd{font-size:12px;padding:7px}.home-layout{grid-template-columns:1fr;gap:32px;padding:32px 0}.home h1{font-size:36px}.sentence-demo{margin-top:25px}.play-panel{width:100%}.rules-strip{grid-template-columns:1fr 1fr;gap:25px}.rule{padding-left:14px}.home-footer{flex-direction:column;gap:10px}.home-meta{gap:10px}.hud .stat+.stat{margin-left:0}.hud{gap:12px}.btn{max-width:100%}}
+@media(prefers-reduced-motion:reduce){.home button{transition:none}}

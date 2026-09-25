@@ -481,15 +481,32 @@ function menu(mode){
     ? {anagram:"wonder → rednow", insert:"a cup of bussin coffee", reorder:"quiet river → river quiet"}
     : {anagram:"언제인가를 → 언인가제를", insert:"어제의 밤티 나보다", reorder:"가장 밝은 → 밝은 가장"};
   app.innerHTML = `
-  <div class="menu">
-    <div class="kicker">TYPING BATTLE ROYALE</div>
-    <div class="logo">타자 <em>배틀로얄</em></div>
-    <div class="sub">문장을 완성하면 상대 문장이 망가진다 · 20초마다 꼴찌 탈락</div>
-    <div class="online" id="online"></div>
-    <div class="account" id="account">${accountHtml()}</div>
-    <div class="modebar">
+  <div class="menu home">
+    <header class="home-nav">
+      <div class="wordmark"><span class="keymark" aria-hidden="true">ㅌ</span> 타자 배틀로얄</div>
+      <div class="home-tools">
       <button class="snd" id="shopBtn">상점</button>
       <button class="snd" id="rankBtn">랭킹</button>
+      <button class="snd" id="snd">${sndLabel()}</button>
+      <button class="snd" id="theme">${themeLabel()}</button>
+      </div>
+    </header>
+    <div class="home-layout">
+    <section class="home-intro">
+      <div class="kicker">한 문장씩, 끝까지.</div>
+      <h1>평화로운 타자 연습에<br><em>공격을 더하면.</em></h1>
+      <p class="home-copy">내 문장을 끝내면, 상대의 문장이 망가진다.<br>20초마다 꼴찌 탈락. 마지막까지 남아보자.</p>
+      <div class="sentence-demo" aria-label="끼워넣기 공격 예시">
+        <div class="demo-label">상대가 보고 있는 문장 <span>끼워넣기 공격</span></div>
+        <p>${CFG.lang === 'en' ? 'I need a cup of <mark>bussin</mark> coffee' : '나는 <mark>준내</mark> 달려간다'}<span class="demo-caret" aria-hidden="true"></span></p>
+        <div class="demo-caption">한 단어만 들어갔는데, 갑자기 어려워졌다.</div>
+      </div>
+      <div class="home-meta"><span>게스트로 바로 플레이</span><span>한타 · 영타</span><span>Tab으로 상대 선택</span></div>
+    </section>
+    <section class="play-panel" aria-label="게임 시작">
+      <div class="panel-heading"><h2>한 판 할까?</h2><div class="online" id="online">접속 현황 확인 중</div></div>
+      <div class="account" id="account">${accountHtml()}</div>
+      <div class="modebar">
       <div class="seg" id="segMode">
         <button data-k="online" class="${mode!=="solo"?"on":""}">온라인 대전</button>
         <button data-k="solo" class="${mode==="solo"?"on":""}">연습 모드</button>
@@ -498,8 +515,6 @@ function menu(mode){
         <button data-k="ko" class="${CFG.lang==="ko"?"on":""}">한타</button>
         <button data-k="en" class="${CFG.lang==="en"?"on":""}">영타</button>
       </div>
-      <button class="snd" id="snd">${sndLabel()}</button>
-      <button class="snd" id="theme">${themeLabel()}</button>
     </div>
     ${mode === "offline" ? `
       <div class="lobby">
@@ -517,8 +532,11 @@ function menu(mode){
       <button class="btn" id="go">연습 시작</button>
     ` : `
       <div class="lobby">
-        <div class="field"><input id="nick" maxlength="12" placeholder="닉네임" value="${esc(AUTH.user?.nickname || nick)}"></div>
+        <label class="input-label" for="nick">닉네임</label>
+        <div class="field"><input id="nick" maxlength="12" placeholder="어떤 이름으로 뛸까?" value="${esc(AUTH.user?.nickname || nick)}"></div>
         <div class="field"><button class="btn" id="quick" style="flex:1">빠른 시작</button><button class="btn rankbtn" id="ranked">랭크전</button></div>
+        <div class="join-divider">친구와 함께라면</div>
+        <label class="input-label" for="code">초대받은 방 코드</label>
         <div class="field">
           <input id="code" maxlength="8" placeholder="방 코드" style="text-transform:uppercase">
           <button class="btn ghost" id="enter">입장</button>
@@ -527,13 +545,15 @@ function menu(mode){
         <div class="err" id="err"></div>
       </div>
     `}
-    <div class="cards">
-      <div class="card"><b>애너그램</b><p>단어 글자를 섞는다.</p><div class="ex">${EX.anagram}</div></div>
-      <div class="card"><b>끼워넣기</b><p>신조어를 문법 맞는 자리에 밀어 넣는다.</p><div class="ex">${EX.insert}</div></div>
-      <div class="card"><b>순서섞기</b><p>어절 순서를 뒤바꾼다.</p><div class="ex">${EX.reorder}</div></div>
-      <div class="card"><b>불가침</b><p>친 부분과 바로 다음 한 어절은 안전. 그 뒤부터 실시간으로 망가진다.</p></div>
+    </section>
     </div>
-    <a class="foot" href="privacy.html">개인정보 처리방침</a>
+    <section class="rules-strip" aria-label="게임 규칙">
+      <div class="rules-title"><span class="kicker">HOW TO PLAY</span><h2>손은 빠르게.<br>공격은 얄밉게.</h2></div>
+      <div class="rule"><span class="rule-number">01</span><b>글자를 섞고</b><p>애너그램</p><div class="ex">${EX.anagram}</div></div>
+      <div class="rule"><span class="rule-number">02</span><b>단어를 끼우고</b><p>끼워넣기</p><div class="ex">${EX.insert}</div></div>
+      <div class="rule"><span class="rule-number">03</span><b>순서를 뒤집고</b><p>순서섞기</p><div class="ex">${EX.reorder}</div></div>
+    </section>
+    <div class="home-footer"><p>이미 친 글자와 바로 다음 한 어절은 안전하다.</p><a class="foot" href="privacy.html">개인정보 처리방침</a></div>
   </div>`;
 
   const seg = (id,key,cast,after) => { const el=$(id); if(!el) return;
