@@ -8,7 +8,7 @@
     "deploy": "npm test && wrangler d1 migrations apply typing-royale --remote && wrangler deploy"
   },
   "devDependencies": {
-    "wrangler": "4.134.0"
+    "wrangler": "4.135.0"
   },
   "engines": {
     "node": "^22.23.2 || ^24.21.0"
