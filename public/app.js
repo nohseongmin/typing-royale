@@ -162,7 +162,7 @@ function fireFx(toId, kind){
   const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
   const x0 = a.left + a.width / 2, y0 = a.top + a.height * .35, x1 = b.left + b.width / 2, y1 = b.top + b.height / 2;
   const orb = document.createElement("div");
-  orb.className = "orb" + (burning ? " fire" : "");
+  orb.className = `orb ${kind}` + (burning ? " fire" : "");
   orb.textContent = ATTACK_NAMES[kind];
   orb.style.left = x0 + "px"; orb.style.top = y0 + "px";
   document.body.appendChild(orb);
@@ -178,7 +178,7 @@ function fireFx(toId, kind){
     bump("#foe-" + toId, "smash");
     for (let i = 0; i < SPARKS; i++){
       const p = document.createElement("i");
-      p.className = "spark" + (burning ? " fire" : "");
+      p.className = `spark ${kind}` + (burning ? " fire" : "");
       p.style.left = x1 + "px"; p.style.top = y1 + "px";
       document.body.appendChild(p);
       const ang = i / SPARKS * Math.PI * 2 + Math.random() * .4, dist = 60 + Math.random() * 55;
@@ -493,18 +493,18 @@ function menu(mode){
     </header>
     <div class="home-layout">
     <section class="home-intro">
-      <div class="kicker">한 문장씩, 끝까지.</div>
-      <h1>평화로운 타자 연습에<br><em>공격을 더하면.</em></h1>
-      <p class="home-copy">내 문장을 끝내면, 상대의 문장이 망가진다.<br>20초마다 꼴찌 탈락. 마지막까지 남아보자.</p>
+      <div class="kicker">타자 배틀로얄</div>
+      <h1>빨리 치고,<br><em>남의 문장을 망쳐라.</em></h1>
+      <p class="home-copy">문장을 끝낼 때마다 공격이 날아간다.<br>시간이 끝나면 꼴찌 한 명이 탈락한다.</p>
       <div class="sentence-demo" aria-label="끼워넣기 공격 예시">
-        <div class="demo-label">상대가 보고 있는 문장 <span>끼워넣기 공격</span></div>
+        <div class="demo-label">상대 화면 <span>끼워넣기</span></div>
         <p>${CFG.lang === 'en' ? 'I need a cup of <mark>bussin</mark> coffee' : '나는 <mark>준내</mark> 달려간다'}<span class="demo-caret" aria-hidden="true"></span></p>
-        <div class="demo-caption">한 단어만 들어갔는데, 갑자기 어려워졌다.</div>
+        <div class="demo-caption">멀쩡한 문장에 이상한 단어가 끼어든다.</div>
       </div>
-      <div class="home-meta"><span>게스트로 바로 플레이</span><span>한타 · 영타</span><span>Tab으로 상대 선택</span></div>
+      <div class="home-meta"><span>로그인 없이 시작</span><span>한글 · 영문 지원</span><span>Tab으로 공격 대상 변경</span></div>
     </section>
     <section class="play-panel" aria-label="게임 시작">
-      <div class="panel-heading"><h2>한 판 할까?</h2><div class="online" id="online">접속 현황 확인 중</div></div>
+      <div class="panel-heading"><h2>바로 시작</h2><div class="online" id="online">접속 현황 확인 중</div></div>
       <div class="account" id="account">${accountHtml()}</div>
       <div class="modebar">
       <div class="seg" id="segMode">
@@ -518,7 +518,7 @@ function menu(mode){
     </div>
     ${mode === "offline" ? `
       <div class="lobby">
-        <div class="wait" style="padding:34px 0">온라인 대전은 웹 주소로 열어야 한다.<br>파일로 열었으면 연습 모드로 해봐라.</div>
+        <div class="wait" style="padding:34px 0">온라인 대전은 배포된 게임 주소에서 이용할 수 있어요.<br>지금은 연습 모드만 가능합니다.</div>
       </div>
     ` : mode === "solo" ? `
       <div class="opts">
@@ -542,13 +542,13 @@ function menu(mode){
           <button class="btn ghost" id="enter">입장</button>
         </div>
         <div class="field"><button class="btn ghost" id="make" style="flex:1">방 만들기</button></div>
-        <div class="err" id="err"></div>
+        <div class="err" id="err" role="status" aria-live="polite"></div>
       </div>
     `}
     </section>
     </div>
     <section class="rules-strip" aria-label="게임 규칙">
-      <div class="rules-title"><span class="kicker">HOW TO PLAY</span><h2>손은 빠르게.<br>공격은 얄밉게.</h2></div>
+      <div class="rules-title"><span class="kicker">공격 방식</span><h2>문장을 끝내면<br>셋 중 하나가 날아간다.</h2></div>
       <div class="rule"><span class="rule-number">01</span><b>글자를 섞고</b><p>애너그램</p><div class="ex">${EX.anagram}</div></div>
       <div class="rule"><span class="rule-number">02</span><b>단어를 끼우고</b><p>끼워넣기</p><div class="ex">${EX.insert}</div></div>
       <div class="rule"><span class="rule-number">03</span><b>순서를 뒤집고</b><p>순서섞기</p><div class="ex">${EX.reorder}</div></div>
@@ -600,13 +600,18 @@ function menu(mode){
     return r.json();
   }
   let busy = false;
-  const guard = fn => async () => {
+  const guard = fn => async e => {
     if (busy) return;
     busy = true;
     fail("");
+    const button = e?.currentTarget, label = button?.textContent;
+    if (button){ button.disabled = true; button.setAttribute("aria-busy", "true"); button.textContent = "연결 중…"; }
     try { await remember(); await fn(); }
     catch (e) { fail(e.message || "서버에 연결하지 못했다"); }
-    finally { busy = false; }
+    finally {
+      busy = false;
+      if (button?.isConnected){ button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = label; }
+    }
   };
 
   $("#quick").addEventListener("click", guard(async ()=>{
@@ -793,7 +798,7 @@ function invite(code){
 
 function lobby(code, name, auto, retry = 0){
   clearInterval(menu.poll);
-  let players = [], deadline = 0, host = null, copiedAt = 0;
+  let players = [], deadline = 0, host = null, copiedAt = 0, elimMs = ELIM_MS;
   const ranked = code.startsWith("RANK"), since = Date.now();
   // 바뀐 부분만 다시 그린다. 버튼을 매번 새로 만들면 누르는 사이에 바뀌어 클릭이 씹힌다.
   const setHtml = (sel, html) => { const el = $(sel); if (el && el._h !== html){ el._h = html; el.innerHTML = html; } };
@@ -821,11 +826,12 @@ function lobby(code, name, auto, retry = 0){
         <button class="btn" id="copyLink">초대 링크 복사</button>
       </div>
       <div class="codehint">링크를 받은 사람은 누르면 닉네임만 정하고 바로 이 방에 들어온다</div>`}
+      <div id="roomSettings"></div>
       <div class="slots" id="slots"></div>
       <div class="wait" id="lwait"></div>
       <div class="field" id="lact"></div>
       <div class="field"><button class="btn ghost" id="leave" style="flex:1">나가기</button></div>
-      <div class="err" id="err"></div>
+      <div class="err" id="err" role="status" aria-live="polite"></div>
     </div>
   </div>`;
   $("#copy")?.addEventListener("click", copyInvite);
@@ -833,6 +839,10 @@ function lobby(code, name, auto, retry = 0){
   $("#inviteUrl")?.addEventListener("focus", e => e.target.select());
   $("#leave").addEventListener("click", ()=>{ stop(); menu("online"); });
   $("#slots").addEventListener("click", e => { const b = e.target.closest("[data-kick]"); if (b) net.send({t:"kick", id: b.dataset.kick}); });
+  $("#roomSettings").addEventListener("click", e => {
+    const b = e.target.closest("[data-elim]");
+    if (b) net.send({t:"settings", elimMs:Number(b.dataset.elim)});
+  });
   $("#lact").addEventListener("click", e => {
     const me = players.find(p => p.id === lobby.you);
     if (e.target.closest("#begin")) net.send({t:"start"});
@@ -856,10 +866,15 @@ function lobby(code, name, auto, retry = 0){
             : `준비 <b>${readyCount}/${players.length}</b> · 모두 준비하면 바로 시작${left !== null ? ` · <b>${left}초</b> 뒤 자동 시작` : ""}`)
         : isHost
           ? (players.length < 2 ? "친구가 들어오면 시작할 수 있다"
-             : allReady ? "<b>모두 준비됐다</b> · 시작해라" : `준비 <b>${readyCount}/${others.length}</b> · 다 준비해야 시작할 수 있다`)
+             : allReady ? "<b>모두 준비 완료</b> · 게임을 시작할 수 있어요" : `준비 <b>${readyCount}/${others.length}</b> · 모두 준비하면 시작할 수 있어요`)
           : me?.ready ? "준비 완료 · 방장이 시작하길 기다리는 중" : "준비를 눌러야 방장이 시작할 수 있다";
     const kicker = `${ranked ? "랭크전" : auto ? "빠른 시작" : "방"} · ${CFG.lang === "en" ? "영타" : "한타"} · ${players.length}/${ROOM_MAX}`;
     if ($("#lkick").textContent !== kicker) $("#lkick").textContent = kicker;
+    setHtml("#roomSettings", auto || ranked ? "" : `
+      <div class="room-setting">
+        <div><b>탈락 주기</b><span>${Math.round(elimMs/1000)}초마다 꼴찌가 탈락한다</span></div>
+        ${isHost ? `<div class="seg">${[15,20,30,45].map(sec=>`<button data-elim="${sec*1000}" class="${elimMs===sec*1000?"on":""}">${sec}초</button>`).join("")}</div>` : `<strong>${Math.round(elimMs/1000)}초</strong>`}
+      </div>`);
     setHtml("#slots",
       players.map(p=>`<div class="slot"><span class="grow">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span>${!auto && p.id===host?'<span class="host">방장</span>':p.ready?'<span class="ready">준비</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}${isHost && p.id !== lobby.you ? `<button class="linkbtn" data-kick="${esc(p.id)}">내보내기</button>` : ""}</div>`).join("") +
       Array.from({length: Math.max(0, 2 - players.length)}, ()=>`<div class="slot empty">비어 있음</div>`).join(""));
@@ -876,12 +891,12 @@ function lobby(code, name, auto, retry = 0){
 
   const net = new Net(code, name, {
     joined: m => {
-      lobby.you = m.you; host = m.host; auto = m.auto;
+      lobby.you = m.you; host = m.host; auto = m.auto; elimMs = m.elimMs || ELIM_MS;
       // 방 언어는 먼저 들어온 사람 기준이다. 한타·영타가 한 방에 섞이면 공정하지 않다.
       if (m.lang && m.lang !== CFG.lang){ CFG.lang = m.lang; toast(m.lang === "en" ? "영타 방에 들어왔다" : "한타 방에 들어왔다"); }
       render();
     },
-    players: m => { players = m.players; host = m.host; render(); },
+    players: m => { players = m.players; host = m.host; elimMs = m.elimMs || elimMs; render(); },
     countdown: m => { deadline = Date.now() + m.sec*1000; render(); },
     denied: m => {
       stop();
@@ -894,7 +909,7 @@ function lobby(code, name, auto, retry = 0){
       }
       menuError(m.reason);
     },
-    start: m => { clearInterval(tick); start({net, code, you: lobby.you, countdown: m.countdown, queue:m.queue}); },
+    start: m => { clearInterval(tick); start({net, code, you: lobby.you, countdown: m.countdown, queue:m.queue, elimMs:m.elimMs}); },
     solo: () => { clearInterval(tick); net.close(); toast("상대가 없어서 봇전으로 시작한다"); start({}); },
     fail: () => { clearInterval(tick); menuError("서버에 연결하지 못했다"); },
     gone: () => { if (!G || !G.running){ clearInterval(tick); menuError("서버 연결이 끊겼다"); } }
@@ -914,7 +929,8 @@ function start(opts){
   const base = DIFF[CFG.diff].cps;
   G = {players:[], me:null, target:null, running:true, nextElim:0, t0:0,
        tick:null, composing:false, committing:false, slide:false, sliding:false, rebuild:false, ver:-1, spans:[], hadErr:false,
-       net, online:!!net, code:opts.code || null, sentProg:0, sentKey:"", spectating:false, pending:false, goAt:0, watchOrder:""};
+       net, online:!!net, code:opts.code || null, sentProg:0, sentKey:"", spectating:false, pending:false, goAt:0, watchOrder:"",
+       elimMs:opts.elimMs || ELIM_MS};
   G.me = new Player(opts.you || "me", "나", false);
   if (G.online) G.me.queue = opts.queue.map(unpackLine);
   G.players.push(G.me);
@@ -928,7 +944,7 @@ function start(opts){
   // 3·2·1 동안은 아무도 못 친다. 온라인은 서버가 준 길이, 연습 모드도 같은 길이로 맞춘다.
   G.t0 = performance.now();
   G.goAt = G.t0 + (opts.countdown ?? COUNTDOWN_MS);
-  G.nextElim = G.goAt + ELIM_MS;
+  G.nextElim = G.goAt + G.elimMs;
   if (G.online) wireGame(net);
   G.players.forEach(p => { p.startedAt = G.goAt; p.lastChar = G.goAt; });
   renderGame();
@@ -949,6 +965,7 @@ function wireGame(net){
         if (had) Object.assign(had, info); else G.players.push(new Remote(info));
       }
       G.players = G.players.filter(p => p === G.me || seen.has(p.id));
+      if (m.elimMs) G.elimMs = m.elimMs;
       if (m.elimIn) G.nextElim = performance.now() + m.elimIn;
     },
     sentence: m => {
@@ -973,7 +990,7 @@ function wireGame(net){
       }
       G.rebuild = true;
       if (m.attack){
-        SFX.hit(); bump("#app", "jolt"); bump("#board", "flash");
+        SFX.hit(); bump("#app", "jolt"); bump("#board", "hit-" + m.attack.kind);
         feed(`${m.attack.from} → 나 · ${ATTACK_NAMES[m.attack.kind]}`, "dmg");
         toast(ATTACK_NAMES[m.attack.kind], "atk");
       }
@@ -1010,21 +1027,27 @@ function wireGame(net){
 }
 
 function renderGame(){
+  const guide = lsGet("tr_guide_v1") ? "" : `
+    <div class="game-guide" id="gameGuide">
+      <span><b>1</b> 문장을 끝내면 공격</span><span><b>2</b> Tab으로 상대 선택</span><span><b>3</b> 꼴찌부터 탈락</span>
+      <button type="button" aria-label="안내 닫기">알겠어</button>
+    </div>`;
   app.innerHTML = `
   <div class="hud" id="hud">
-    <span class="tleft" id="tleft">다음 탈락 20.0초</span>
-    <span class="tick"><i id="tbar"></i></span>
-    <span class="stat"><b class="num" id="sCpm">0</b><u>타/분</u></span>
-    <span class="stat"><b class="num" id="sAcc">100</b><u>%</u></span>
-    <span class="stat"><b class="num" id="sDone">0</b><u>문장</u></span>
-    <span class="stat"><b class="num" id="sRank">1</b><u>위</u></span>
-    <span class="stat streak"><b class="num" id="sStreak">0</b><u>연속</u></span>
+    <div class="elim-clock"><span class="tleft" id="tleft">다음 탈락 ${(G.elimMs/1000).toFixed(0)}초</span><span class="tick"><i id="tbar"></i></span></div>
+    <div class="metrics">
+      <span class="stat"><b class="num" id="sRank">1</b><u>위</u></span>
+      <span class="stat"><b class="num" id="sCpm">0</b><u>타/분</u></span>
+      <span class="stat"><b class="num" id="sAcc">100</b><u>%</u></span>
+      <span class="stat"><b class="num" id="sDone">0</b><u>문장</u></span>
+      <span class="stat streak"><b class="num" id="sStreak">0</b><u>연속</u></span>
+    </div>
     <span class="aimpill" id="aimPill"></span>
-    <button class="snd" id="snd">${sndLabel()}</button>
-      <button class="snd" id="theme">${themeLabel()}</button>
+    <div class="game-tools"><button class="snd" id="snd">${sndLabel()}</button><button class="snd" id="theme">${themeLabel()}</button></div>
   </div>
   <div class="stage">
     <div>
+      ${guide}
       <div class="board" id="board">
         <div class="rail"><div class="track" id="track"></div></div>
         <div class="hint" id="hint"></div>
@@ -1036,7 +1059,7 @@ function renderGame(){
     </div>
     <div>
       <div class="foes" id="foes"></div>
-      <div class="aim">Tab으로 공격 대상 바꾸기 · 카드 클릭도 된다</div>
+      <div class="aim">Tab 대상 변경 · Shift+Tab 이전 대상</div>
     </div>
   </div>`;
 
@@ -1071,6 +1094,7 @@ function renderGame(){
   $("#blur").addEventListener("click", ()=> inp.focus());
   $("#snd").addEventListener("click", e => { SFX.toggle(); e.currentTarget.textContent = sndLabel(); });
   $("#theme").addEventListener("click", toggleTheme);
+  $("#gameGuide button")?.addEventListener("click", ()=>{ lsSet("tr_guide_v1", "1"); $("#gameGuide")?.remove(); });
   document.addEventListener("click", ()=>{ if (G && G.running) inp.focus(); });
   inp.focus();
   buildRows();
@@ -1200,7 +1224,7 @@ function loop(){
       G.net.send(msg);
     }
   } else if (now >= G.nextElim){
-    eliminate(); G.nextElim = now + ELIM_MS;
+    eliminate(); G.nextElim = now + G.elimMs;
   }
   if (G.running) G.spectating ? drawWatch() : draw();
 }
@@ -1235,7 +1259,7 @@ function over(win){
   app.innerHTML = `
   <div class="over">
     <div class="big ${win?"win":""}">${win ? "WINNER" : me.rank + "위"}</div>
-    <p>${win ? "마지막까지 살아남았다" : `${G.players.length}명 중 ${me.rank}위`}</p>
+    <p>${win ? "끝까지 버텼다" : `${G.players.length}명 중 ${me.rank}위`}</p>
     <div class="reward num" id="reward"></div>
     <div class="rating" id="ratingLine"></div>
     <div class="final">
@@ -1279,7 +1303,7 @@ function quitGame(){
 function drawWatch(){
   const now = performance.now(), left = Math.max(0, G.nextElim - now);
   $("#tleft").textContent = `다음 탈락 ${(left/1000).toFixed(1)}초`;
-  $("#tbar").style.width = Math.min(100, left / ELIM_MS * 100) + "%";
+  $("#tbar").style.width = Math.min(100, left / G.elimMs * 100) + "%";
   const list = G.players.filter(p => p !== G.me).sort((a,b) => (b.alive - a.alive) || (b.score - a.score));
   const box = $("#watch"), order = list.map(p => p.id).join();
   if (G.watchOrder !== order){   // 순위가 바뀔 때만 카드를 다시 배치한다
@@ -1315,7 +1339,7 @@ function draw(){
 
   const left = Math.max(0, G.nextElim - now);
   $("#tleft").textContent = `다음 탈락 ${(left/1000).toFixed(1)}초`;
-  $("#tbar").style.width = Math.min(100, left / ELIM_MS * 100) + "%";
+  $("#tbar").style.width = Math.min(100, left / G.elimMs * 100) + "%";
   $("#hud").classList.toggle("danger", left < 5000);
 
   // 글자 상태
@@ -1377,7 +1401,7 @@ function draw(){
   if (box.children.length !== foes.length){
     box.innerHTML = foes.map(p=>`
       <div class="foe" id="foe-${p.id}" data-id="${p.id}">
-        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span><span class="dn"></span></div>
+        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span><span class="state"></span><span class="dn"></span></div>
         <div class="pbar"><i></i></div>
         <div class="meta"><span class="load"></span><span class="sp"></span></div>
         <div class="mini"></div>
@@ -1387,9 +1411,12 @@ function draw(){
     const el = $("#foe-"+p.id); if (!el) continue;
     el.classList.toggle("dead", !p.alive);
     el.classList.toggle("target", G.target === p.id);
+    el.classList.toggle("danger", p.alive && ranked.length > 1 && ranked.at(-1) === p);
+    el.setAttribute("aria-pressed", String(G.target === p.id));
     el.querySelector(".pbar i").style.width = (p.progress*100) + "%";
     el.querySelector(".dn").textContent = p.done + "문장";
     el.querySelector(".rk").textContent = p.alive ? (ranked.indexOf(p)+1) + "위" : "OUT";
+    el.querySelector(".state").textContent = !p.alive ? "탈락" : G.target === p.id ? "공격 대상" : ranked.length > 1 && ranked.at(-1) === p ? "탈락 위기" : "";
     el.querySelector(".load").textContent = p.alive && p.incoming ? "적재 " + p.incoming : "";
     el.querySelector(".sp").textContent = p.alive && p.cps ? Math.round(p.cps*strokesPerChar()*60) + "타/분" : "";
     const mini = el.querySelector(".mini"), mh = p.alive ? lineHtml(liveOf(p), MINI_BEFORE, MINI_AFTER) : "";

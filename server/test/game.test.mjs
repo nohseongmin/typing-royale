@@ -117,3 +117,19 @@ test('reorder attacks cannot restore previously swapped words',()=>{
   assert.equal(corrupt(line,0,'reorder'),'reorder');
   for(const [i,word] of locked) assert.equal(line.words[i],word);
 });
+
+test('only a private-room host can change the elimination interval',()=>{
+  const room=new Room({},{}), sent=[];
+  const host={id:'host',ws:{}}, guest={id:'guest',ws:{}};
+  room.host=host.id; room.players.set(host.id,host); room.players.set(guest.id,guest);
+  room.send=(_ws,msg)=>sent.push(msg);
+  room.onMessage(guest,{t:'settings',elimMs:45000});
+  room.onMessage(host,{t:'settings',elimMs:12345});
+  assert.equal(room.elimMs,20000);
+  room.onMessage(host,{t:'settings',elimMs:45000});
+  assert.equal(room.elimMs,45000);
+  assert.equal(sent.at(-1).elimMs,45000);
+  room.auto=true;
+  room.onMessage(host,{t:'settings',elimMs:15000});
+  assert.equal(room.elimMs,45000);
+});

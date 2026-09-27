@@ -33,6 +33,7 @@ const LOBBY_IDLE_MS = 5 * 60 * 1000;   // 시작 안 하고 이만큼 지난 대
 const OVER_CLOSE_MS = 10000;    // 끝난 판은 결과를 받을 시간만 두고 닫는다
 const COUNTDOWN_MS = 3000;      // 시작 신호 뒤 3·2·1 동안은 입력도 판정도 하지 않는다
 const ELIM_MS = 20000;          // 탈락 주기
+const ELIM_CHOICES = new Set([15000, 20000, 30000, 45000]);
 const STATE_HZ = 5;             // 진행도 브로드캐스트 빈도
 const HEARTBEAT_MS = 30000;     // 방이 살아 있다고 매치메이커에 알리는 주기
 const ROOM_STALE_MS = 75000;    // 이만큼 소식 없는 방은 매치메이커 목록에서 지운다
@@ -299,6 +300,7 @@ export class Room {
     this.loop = null;
     this.heart = null;
     this.elimAt = 0;
+    this.elimMs = ELIM_MS;
     this.playStartedAt = 0;
     this.lang = "ko";           // 첫 입장자의 언어로 정해진다
     // ponytail: 방 상태를 메모리에만 둔다. 게임이 몇 분 안에 끝나고 WebSocket이 붙어 있는
@@ -355,7 +357,7 @@ export class Room {
     this.players.set(id, player);
     if (!this.host) this.host = id;
 
-    this.send(ws, {t: "joined", you: id, code: this.code, max: MAX_PLAYERS, lang: this.lang, auto: this.auto, host: this.host});
+    this.send(ws, {t: "joined", you: id, code: this.code, max: MAX_PLAYERS, lang: this.lang, auto: this.auto, host: this.host, elimMs: this.elimMs});
     this.broadcastPlayers();
     this.report();
 
@@ -482,6 +484,7 @@ export class Room {
     this.startAt = 0;
     this.startFor = "";
     this.phase = "lobby";
+    this.elimMs = ELIM_MS;
     for (const p of this.players.values()) {
       Object.assign(p, {done: 0, prog: 0, alive: true, rank: 0, ready: false, line: "", pos: 0, bad: false, dt: [],
                         lineStrokes: 0, doneLine: "", spent: 0, strikes: 0, suspect: false});
@@ -500,19 +503,19 @@ export class Room {
     this.playStartedAt = 0;   // 지난 판 값이 남으면 3·2·1 중에 끝난 판도 끝까지 한 판으로 친다
     for (const p of this.players.values()) {
       this.initSentences(p);
-      this.send(p.ws, {t: "start", countdown: COUNTDOWN_MS, queue: p.queue.map(packLine)});
+      this.send(p.ws, {t: "start", countdown: COUNTDOWN_MS, queue: p.queue.map(packLine), elimMs: this.elimMs});
     }
     this.report();
     this.startTimer = setTimeout(() => {
       this.phase = "playing";
       this.playStartedAt = Date.now();
       for (const p of this.players.values()) p.lastDoneAt = p.progAt = this.playStartedAt;
-      this.elimAt = Date.now() + ELIM_MS;
+      this.elimAt = Date.now() + this.elimMs;
       this.report();
       this.loop = setInterval(() => {
         if (Date.now() >= this.elimAt) {
           this.eliminate();
-          this.elimAt = Date.now() + ELIM_MS;
+          this.elimAt = Date.now() + this.elimMs;
         }
         this.broadcastPlayers();
       }, Math.round(1000 / STATE_HZ));
@@ -568,6 +571,13 @@ export class Room {
       p.ready = !!msg.on;
       this.broadcastPlayers();
       if (this.auto) this.scheduleStart();
+      return;
+    }
+    if (msg.t === "settings") {
+      const elimMs = Number(msg.elimMs);
+      if (this.auto || p.id !== this.host || this.phase !== "lobby" || !ELIM_CHOICES.has(elimMs)) return;
+      this.elimMs = elimMs;
+      this.broadcastPlayers();
       return;
     }
     if (msg.t === "start") {
@@ -671,7 +681,7 @@ export class Room {
   async payout() {
     // 3·2·1 중에 끝난 판은 코인이 없다. 랭크전은 그때 나간 사람만 잃는다(판 피하기 방지).
     if (!this.playStartedAt && !this.ranked) return;
-    const fullGame = !!this.playStartedAt && Date.now() - this.playStartedAt >= ELIM_MS;
+    const fullGame = !!this.playStartedAt && Date.now() - this.playStartedAt >= this.elimMs;
     const everyone = [...this.players.values(), ...this.departed];
     try {
       if (this.ranked) {
@@ -714,6 +724,6 @@ export class Room {
     const list = [...this.players.values()].map(({id, name, acct, done, prog, alive, rank, ready, line, pos, bad, dt}) =>
       ({id, name, acct, done, prog, alive, rank, ready, line, pos, bad, dt}));
     const elimIn = this.phase === "playing" ? Math.max(0, this.elimAt - Date.now()) : 0;
-    this.broadcast({t: "players", players: list, elimIn, phase: this.phase, host: this.host, auto: this.auto});
+    this.broadcast({t: "players", players: list, elimIn, elimMs: this.elimMs, phase: this.phase, host: this.host, auto: this.auto});
   }
 }

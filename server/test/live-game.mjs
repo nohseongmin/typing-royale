@@ -28,10 +28,13 @@ try {
   assert.match((await legacy.next(m=>m.t==='denied')).reason,/새로고침/);
   const host=connect(code,'HostCheck'), guest=connect(code,'GuestCheck');
   await Promise.all([host.next(m=>m.t==='joined'),guest.next(m=>m.t==='joined')]);
+  host.send({t:'settings',elimMs:30000});
+  await guest.next(m=>m.t==='players' && m.elimMs===30000);
   guest.send({t:'ready',on:true});
   await host.next(m=>m.t==='players' && m.players.some(p=>p.name==='GuestCheck' && p.ready));
   host.send({t:'start'});
   const [a,b]=await Promise.all([host.next(m=>m.t==='start'),guest.next(m=>m.t==='start')]);
+  assert.equal(a.elimMs,30000); assert.equal(b.elimMs,30000);
   await delay(a.countdown+100);
   const text=a.queue[0].words.join(' ');
   host.send({t:'prog',index:0,text:text.slice(0,-1),prog:1,pos:999,line:'fake'});
@@ -52,7 +55,7 @@ try {
   host.send({t:'done',index:1,version:live.queue[0].v,text:live.queue[0].words.join(' ')});
   const second=await host.next(m=>m.t==='sentence' && m.accepted && m.index===2);
   assert.ok(second.spent>ack.spent);
-  console.log('PASS: legacy rejection, 2-player ready/start, final input, attack resync, replay rejection, consecutive completion');
+  console.log('PASS: legacy rejection, host settings, 2-player ready/start, final input, attack resync, replay rejection, consecutive completion');
 } finally {
   for (const ws of sockets) ws.close();
 }
