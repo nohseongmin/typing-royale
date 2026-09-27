@@ -686,7 +686,7 @@ async function shop(tab = "sound"){
   const preview = it => it.slot === "font"
     ? `<div class="pv" style='font-family:${loadFont(it.id) || "inherit"}'>타자 배틀로얄 Typing</div>`
     : it.slot === "theme"
-      ? `<div class="pv swatch" style="--sw:${SKIN_THEMES[it.id] || "#10b981"}"><i></i><i></i><i></i></div>`
+      ? `<div class="pv swatch" style="--sw:${SKIN_THEMES[it.id] || "#3b82f6"}"><i></i><i></i><i></i></div>`
       : `<button class="snd pv" data-listen="${it.id}">들어보기</button>`;
   const action = it => {
     const price = it.price ? it.price + " 코인" : "무료";

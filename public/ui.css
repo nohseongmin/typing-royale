@@ -1,7 +1,7 @@
 /* Layout/typography reference: https://github.com/tasteskill/tasteskill (MIT).
    Keep the existing vanilla UI and semantic combat colors. */
-:root{--bg:#f3f6fa;--surface:#fff;--soft:#e9eef4;--soft2:#dfe6ee;--line:#d3dce6;--ink:#1c2733;--mute:#667585;--dim:#aeb9c5;--acc:#287a58}
-:root[data-theme="dark"]{--bg:#111820;--surface:#18232d;--soft:#202d38;--soft2:#293946;--line:#334553;--ink:#edf2f5;--mute:#98a8b6;--dim:#586a79}
+:root{--bg:#fff;--surface:#fff;--soft:#f5f5f5;--soft2:#ededed;--line:#dedede;--ink:#191b1e;--mute:#707782;--dim:#b8bdc5;--acc:#3b82f6}
+:root[data-theme="dark"]{--bg:#000;--surface:#111;--soft:#191919;--soft2:#242424;--line:#303030;--ink:#f5f5f5;--mute:#a0a0a0;--dim:#595959}
 body{height:auto;min-height:100dvh;padding:36px 48px}
 button,input,a{-webkit-tap-highlight-color:transparent}
 button:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
