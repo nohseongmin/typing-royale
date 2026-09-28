@@ -321,6 +321,7 @@ export class Room {
     this.accept(pair[1], {
       name: (url.searchParams.get("name") || "익명").slice(0, 12),
       lang: url.searchParams.get("lang") === "en" ? "en" : "ko",
+      device: url.searchParams.get("device") === "mobile" ? "mobile" : "pc",
       uid: Number(url.searchParams.get("uid")) || null,   // 로그인 안 했으면 null
       ip: url.searchParams.get("ip") || ""
     });
@@ -329,7 +330,7 @@ export class Room {
     return new Response(null, {status: 101, webSocket: pair[0], headers});
   }
 
-  accept(ws, {name, lang, uid, ip}) {
+  accept(ws, {name, lang, device, uid, ip}) {
     ws.accept();
 
     if (this.phase !== "lobby") { this.kick(ws, "이미 시작한 방이다"); return; }
@@ -351,7 +352,7 @@ export class Room {
         Number(this.env.LOBBY_IDLE_MS) || LOBBY_IDLE_MS);
     }
     const id = crypto.randomUUID().slice(0, 8);
-    const player = {id, uid, ip, name, ws, acct: !!uid, done: 0, prog: 0, alive: true, rank: 0, aim: null,
+    const player = {id, uid, ip, name, device, ws, acct: !!uid, done: 0, prog: 0, alive: true, rank: 0, aim: null,
                     ready: false, line: "", pos: 0, bad: false, dt: [],
                     lineStrokes: 0, progAt: 0, lastDoneAt: 0, doneLine: "", spent: 0, strikes: 0, suspect: false};
     this.players.set(id, player);
@@ -721,8 +722,8 @@ export class Room {
   send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch {} }
   broadcast(obj) { for (const p of this.players.values()) this.send(p.ws, obj); }
   broadcastPlayers() {
-    const list = [...this.players.values()].map(({id, name, acct, done, prog, alive, rank, ready, line, pos, bad, dt}) =>
-      ({id, name, acct, done, prog, alive, rank, ready, line, pos, bad, dt}));
+    const list = [...this.players.values()].map(({id, name, device, acct, done, prog, alive, rank, ready, line, pos, bad, dt}) =>
+      ({id, name, device, acct, done, prog, alive, rank, ready, line, pos, bad, dt}));
     const elimIn = this.phase === "playing" ? Math.max(0, this.elimAt - Date.now()) : 0;
     this.broadcast({t: "players", players: list, elimIn, elimMs: this.elimMs, phase: this.phase, host: this.host, auto: this.auto});
   }

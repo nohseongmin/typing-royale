@@ -330,6 +330,7 @@ const SERVER = /^https?:$/.test(location.protocol) ? location.origin : "";
 const WS_PROTOCOL = "tr.v2";   // 서버와 같은 값
 const httpBase = () => SERVER;
 const wsBase   = () => SERVER.replace(/^http/, "ws");
+const DEVICE = navigator.userAgentData?.mobile || matchMedia("(pointer:coarse)").matches ? "mobile" : "pc";
 
 class Net{
   constructor(code, name, handlers){
@@ -337,7 +338,7 @@ class Net{
     // 로그인 토큰은 주소에 넣지 않고 서브프로토콜 헤더로 보낸다. 주소는 서버 로그에 남는다.
     const protocols = [WS_PROTOCOL];
     if (/^[\w-]+$/.test(AUTH.token || "")) protocols.push("auth." + AUTH.token);
-    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&lang=${CFG.lang}`, protocols);
+    this.ws = new WebSocket(`${wsBase()}/ws?room=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&lang=${CFG.lang}&device=${DEVICE}`, protocols);
     this.ws.onopen = () => this.h.open && this.h.open();
     this.ws.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -876,7 +877,7 @@ function lobby(code, name, auto, retry = 0){
         ${isHost ? `<div class="seg">${[15,20,30,45].map(sec=>`<button data-elim="${sec*1000}" class="${elimMs===sec*1000?"on":""}">${sec}초</button>`).join("")}</div>` : `<strong>${Math.round(elimMs/1000)}초</strong>`}
       </div>`);
     setHtml("#slots",
-      players.map(p=>`<div class="slot"><span class="grow">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span>${!auto && p.id===host?'<span class="host">방장</span>':p.ready?'<span class="ready">준비</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}${isHost && p.id !== lobby.you ? `<button class="linkbtn" data-kick="${esc(p.id)}">내보내기</button>` : ""}</div>`).join("") +
+      players.map(p=>`<div class="slot"><span class="grow">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span><span class="device">${p.device === "mobile" ? "모바일" : "PC"}</span>${!auto && p.id===host?'<span class="host">방장</span>':p.ready?'<span class="ready">준비</span>':""}${p.id===lobby.you?'<span class="me">나</span>':""}${isHost && p.id !== lobby.you ? `<button class="linkbtn" data-kick="${esc(p.id)}">내보내기</button>` : ""}</div>`).join("") +
       Array.from({length: Math.max(0, 2 - players.length)}, ()=>`<div class="slot empty">비어 있음</div>`).join(""));
     setHtml("#lwait", status);
     setHtml("#lact", ranked ? ""
@@ -1075,7 +1076,7 @@ function renderGame(){
   const inp = $("#type");
   inp.addEventListener("compositionstart", ()=> G.composing = true);
   inp.addEventListener("compositionend", ()=> G.composing = false);
-  inp.addEventListener("input", ()=>{ if (!G.committing) onInput(); });
+  inp.addEventListener("input", e=>{ G.composing = !!e.isComposing; if (!G.committing) onInput(); });
   inp.addEventListener("keydown", e=>{
     const me = G.me;
     // 포커스가 입력칸을 떠나지 않게 막고 공격 대상만 돌린다
@@ -1089,7 +1090,7 @@ function renderGame(){
     if (!e.isComposing && e.key === "Backspace" && inp.value.length <= me.locked){ e.preventDefault(); return; }
     if (e.key.length === 1 || e.key === "Process" || e.key === "Backspace"){ me.keys++; SFX.key(); }
   });
-  inp.addEventListener("blur", ()=> $("#blur").classList.add("on"));
+  inp.addEventListener("blur", ()=>{ if (!G.committing) $("#blur").classList.add("on"); });
   inp.addEventListener("focus", ()=> $("#blur").classList.remove("on"));
   $("#blur").addEventListener("click", ()=> inp.focus());
   $("#snd").addEventListener("click", e => { SFX.toggle(); e.currentTarget.textContent = sndLabel(); });
@@ -1125,6 +1126,8 @@ function onInput(){
   if (G.pending){ inp.value = me.typed; return; }
   if (performance.now() < G.goAt){ if (G.composing) endComposition(); else inp.value = ""; return; }
   let v = inp.value;
+  // 일부 모바일 IME는 compositionstart보다 input을 먼저 보낸다. 마지막 글자가 목표 글자의 자모 앞부분이면 조합 중으로 본다.
+  if (!G.composing && firstWrong(v, t, false) >= 0 && firstWrong(v, t, true) < 0) G.composing = true;
   let w = firstWrong(v, t, G.composing);
 
   if (G.composing){
@@ -1313,7 +1316,7 @@ function drawWatch(){
     G.watchOrder = order;
     box.innerHTML = list.map(p => `
       <div class="wcard" id="w-${p.id}">
-        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span><span class="dn"></span></div>
+        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span>${p.device ? `<span class="device">${p.device === "mobile" ? "모바일" : "PC"}</span>` : ""}<span class="dn"></span></div>
         <div class="wline"></div>
         <div class="pbar"><i></i></div>
       </div>`).join("");
@@ -1404,7 +1407,7 @@ function draw(){
   if (box.children.length !== foes.length){
     box.innerHTML = foes.map(p=>`
       <div class="foe" id="foe-${p.id}" data-id="${p.id}">
-        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span><span class="state"></span><span class="dn"></span></div>
+        <div class="top"><span class="rk"></span><span class="nm">${esc(p.name)}${p.acct ? ACCT_MARK : ""}</span>${p.device ? `<span class="device">${p.device === "mobile" ? "모바일" : "PC"}</span>` : ""}<span class="state"></span><span class="dn"></span></div>
         <div class="pbar"><i></i></div>
         <div class="meta"><span class="load"></span><span class="sp"></span></div>
         <div class="mini"></div>

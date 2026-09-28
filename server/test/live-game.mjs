@@ -4,9 +4,9 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 const base = new URL(process.env.TEST_BASE_URL);
 const sockets=[];
-function connect(code, name, protocol='tr.v2') {
+function connect(code, name, protocol='tr.v2', device='pc') {
   const url=new URL('/ws',base); url.protocol=base.protocol==='https:' ? 'wss:' : 'ws:';
-  url.search=new URLSearchParams({room:code,name,lang:'en'});
+  url.search=new URLSearchParams({room:code,name,lang:'en',device});
   const ws=new WebSocket(url,[protocol]); sockets.push(ws);
   const frames=[];
   ws.addEventListener('message',event=>frames.push(JSON.parse(event.data)));
@@ -26,8 +26,9 @@ try {
   const {code}=await response.json();
   const legacy=connect(code,'LegacyCheck','tr.v1');
   assert.match((await legacy.next(m=>m.t==='denied')).reason,/새로고침/);
-  const host=connect(code,'HostCheck'), guest=connect(code,'GuestCheck');
+  const host=connect(code,'HostCheck','tr.v2','mobile'), guest=connect(code,'GuestCheck','tr.v2','tablet');
   await Promise.all([host.next(m=>m.t==='joined'),guest.next(m=>m.t==='joined')]);
+  await host.next(m=>m.t==='players' && m.players.some(p=>p.name==='HostCheck' && p.device==='mobile') && m.players.some(p=>p.name==='GuestCheck' && p.device==='pc'));
   host.send({t:'settings',elimMs:30000});
   await guest.next(m=>m.t==='players' && m.elimMs===30000);
   guest.send({t:'ready',on:true});
@@ -55,7 +56,7 @@ try {
   host.send({t:'done',index:1,version:live.queue[0].v,text:live.queue[0].words.join(' ')});
   const second=await host.next(m=>m.t==='sentence' && m.accepted && m.index===2);
   assert.ok(second.spent>ack.spent);
-  console.log('PASS: legacy rejection, host settings, 2-player ready/start, final input, attack resync, replay rejection, consecutive completion');
+  console.log('PASS: legacy rejection, device labels, host settings, 2-player ready/start, final input, attack resync, replay rejection, consecutive completion');
 } finally {
   for (const ws of sockets) ws.close();
 }
