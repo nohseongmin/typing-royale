@@ -26,8 +26,10 @@ try {
   const {code}=await response.json();
   const legacy=connect(code,'LegacyCheck','tr.v1');
   assert.match((await legacy.next(m=>m.t==='denied')).reason,/새로고침/);
-  const host=connect(code,'HostCheck','tr.v2','mobile'), guest=connect(code,'GuestCheck','tr.v2','tablet');
-  await Promise.all([host.next(m=>m.t==='joined'),guest.next(m=>m.t==='joined')]);
+  const host=connect(code,'HostCheck','tr.v2','mobile');
+  await host.next(m=>m.t==='joined');
+  const guest=connect(code,'GuestCheck','tr.v2','tablet');
+  await guest.next(m=>m.t==='joined');
   await host.next(m=>m.t==='players' && m.players.some(p=>p.name==='HostCheck' && p.device==='mobile') && m.players.some(p=>p.name==='GuestCheck' && p.device==='pc'));
   host.send({t:'settings',elimMs:30000});
   await guest.next(m=>m.t==='players' && m.elimMs===30000);
