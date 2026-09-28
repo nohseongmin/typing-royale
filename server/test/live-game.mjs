@@ -16,7 +16,7 @@ function connect(code, name, protocol='tr.v2', device='pc') {
       const found=frames.find(predicate); if(found) return found;
       await delay(20);
     }
-    throw new Error('Timed out waiting for frame; received '+frames.map(m=>m.t).join(','));
+    throw new Error('Timed out waiting for frame; received '+JSON.stringify(frames));
   }};
 }
 
