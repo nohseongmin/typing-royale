@@ -1074,8 +1074,8 @@ function renderGame(){
 
   const inp = $("#type");
   inp.addEventListener("compositionstart", ()=> G.composing = true);
-  inp.addEventListener("compositionend", ()=>{ G.composing = false; onInput(); });
-  inp.addEventListener("input", onInput);
+  inp.addEventListener("compositionend", ()=> G.composing = false);
+  inp.addEventListener("input", ()=>{ if (!G.committing) onInput(); });
   inp.addEventListener("keydown", e=>{
     const me = G.me;
     // 포커스가 입력칸을 떠나지 않게 막고 공격 대상만 돌린다
@@ -1106,13 +1106,16 @@ function renderGame(){
 function endComposition(){
   if (G.committing) return;
   G.committing = true;
+  const inp = $("#type");
+  if (!inp){ G.committing = false; return; }
+  inp.blur();
   setTimeout(()=>{
     const inp = $("#type");
-    G.committing = false;
-    if (!inp || !G.running) return;
-    inp.blur(); inp.focus();
+    if (!inp || !G.running){ G.committing = false; return; }
     G.composing = false;
+    G.committing = false;
     onInput();
+    inp.focus();
   }, 0);
 }
 
@@ -1125,8 +1128,8 @@ function onInput(){
   let w = firstWrong(v, t, G.composing);
 
   if (G.composing){
-    // 틀린 글자 뒤로 새 글자를 조합하기 시작했거나, 마지막 글자까지 맞게 조합했으면 조합을 끊고 다시 판정한다
-    if ((w >= 0 && w < v.length - 1) || v === t) endComposition();
+    // 틀린 글자는 한 글자로 확정해야 백스페이스 한 번에 지워진다. 문장 끝도 확정 후 한 번만 판정한다.
+    if (w >= 0 || v === t) endComposition();
   } else {
     if (v.length < me.locked) v = t.slice(0, me.locked);          // 맞게 친 부분은 지울 수 없다
     else if (w >= 0 && v.length > w + 1) v = v.slice(0, w + 1);   // 틀린 글자에서 멈춘다
