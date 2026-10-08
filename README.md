@@ -1,47 +1,50 @@
-# 타자 배틀로얄
+# Typing Royale
 
-타자연습 + 배틀로얄. 문장을 먼저 완성하면 상대의 문장이 망가진다. 20초마다 꼴찌가 탈락하고 마지막 한 명이 남을 때까지 간다.
+A typing battle royale. Completing a sentence attacks another player's text. The slowest player is eliminated every 20 seconds until one player remains.
 
-**플레이 →** https://nohseongmin.github.io/typing-royale/
+[Play](https://nohseongmin.github.io/typing-royale/).
 
-클라이언트는 `public/`의 HTML·JavaScript, 서버는 `server/`의 Cloudflare Worker와 Durable Objects로 구성된다. 새 배포에서는 같은 출처에서 게임과 API를 제공한다.
+The client lives in `public/`. The server uses a Cloudflare Worker and Durable Objects in `server/`. New deployments serve the game and API from the same origin.
 
-## 규칙
+## Rules
 
-문장 하나를 완성할 때마다 공격이 나간다. 빠르게 끝내면 2발.
+Each completed sentence fires one attack; fast completions fire two.
 
-| 공격 | 하는 짓 | 예시 |
-|---|---|---|
-| 애너그램 | 단어 글자를 섞는다 | `언제인가를` → `언인가제를` |
-| 끼워넣기 | 신조어를 밀어 넣는다 | `뒷모습은 아름답다` → `뒷모습은 미친 아름답다` |
-| 순서섞기 | 어절 순서를 뒤바꾼다 | `가장 밝은` → `밝은 가장` |
+| Attack | Effect |
+|---|---|
+| Anagram | Shuffle letters within a word. |
+| Insertion | Add slang at a grammatically suitable position. |
+| Reordering | Change the order of words. |
 
-공격은 상대가 **지금 치고 있는 문장에도** 들어간다. 단 이미 친 부분과 바로 다음 한 어절은 건드리지 않는다. 그 뒤부터 눈앞에서 문장이 망가진다.
+Attacks can alter the sentence an opponent is currently typing. The completed portion and the next word are protected. Each sentence accepts at most two attacks; additional attacks carry over to the next sentence.
 
-한 문장이 받을 수 있는 공격은 2발까지고, 넘치면 다음 문장으로 밀린다. 몰아서 맞아도 버려지는 공격이 없다.
+## Implementation notes
 
-## 구현 메모
+Insertion uses Korean parts of speech to place modifiers before nouns and adverbs before predicates or adverbs. Ambiguous positions are discarded. Dependent nouns and auxiliary verb constructions stay together.
 
-**끼워넣기는 문법을 안 깬다.** 신조어를 아무 데나 넣으면 문장이 읽을 수 없게 되기 때문에, 뒤에 오는 단어의 품사를 보고 자리를 고른다. 관형어(`미친`, `도른`, `찐`)는 체언 앞에만, 부사(`준내`, `개`, `핵`)는 용언·부사 앞에만 들어간다.
+Typing speed counts physical keystrokes on a standard Korean two-set keyboard. Compound vowels and final consonants count as two strokes, matching the convention used by Hancom typing practice.
 
-조사와 어미가 겹치는 경우가 많아서(`않는다는`, `아직도`, `있지만`) 확실할 때만 자리로 인정하고 애매하면 버린다. 의존명사 뒤(`수 있다`), 보조용언 구성(`-어 있다`, `-게 되다`, `-기 시작하다`, `-지 않다`)도 사이를 벌리지 않는다.
+Rendering uses one `setInterval`. `requestAnimationFrame` can stop when a tab is hidden or displayed inside an embedded viewer.
 
-**타수는 두벌식 실제 키 입력 수로 센다.** 겹모음(`ㅘ`, `ㅚ`, `ㅢ`)과 겹받침(`ㄺ`, `ㅄ`)은 2타로 계산해서 한컴타자연습 수치와 맞춘다.
+## Multiplayer
 
-**렌더링은 `setInterval` 하나로 돌린다.** `requestAnimationFrame`은 탭이 가려지거나 임베드 뷰어 안에서 멈춰버려서 화면이 통째로 얼어붙는다.
+Rooms support invitation links, ready states, countdowns, and spectators. A Durable Object manages room progress and eliminations and relays attacks. Completion reports and attack application still rely partly on the client; rate limits do not provide full cheat prevention.
 
-## 멀티플레이
+## Development and deployment
 
-방 생성·초대 링크·준비·카운트다운·관전을 지원한다. Durable Object가 방별 진행도와 탈락을 관리하고 공격을 중계한다. 현재 완료 신고와 공격 적용에는 클라이언트 신뢰가 남아 있으며, 속도 제한은 완전한 부정행위 방지가 아니다.
+Use Node 22.x from 22.23.2 onward, or Node 24.x from 24.21.0 onward. Older versions are rejected by `.npmrc`. Dependencies are pinned in the lockfile.
 
-## 개발과 배포
+```bash
+cd server
+npm ci --ignore-scripts
+npm test
+npm run dev
+```
 
-Node 22.23.2 이상 22.x 또는 24.21.0 이상 24.x가 필요하다. `server/`에서 `npm ci --ignore-scripts`, `npm test`, `npm run dev`를 실행한다. 의존성은 lockfile로 고정하며 오래된 Node는 `.npmrc`에서 거절한다.
+Open release issues are recorded in [SECURITY-STATUS.md](SECURITY-STATUS.md). After validation, `npm run deploy` runs tests, applies remote D1 migrations, and deploys the Worker. Check the interface and API on the Worker before pushing main. GitHub Actions publishes a redirect from the existing Pages address to the Worker.
 
-공개 전 남은 항목은 `SECURITY-STATUS.md`에 기록한다. 검증이 끝나면 `server/`에서 `npm run deploy`로 테스트 → 원격 D1 마이그레이션 → Worker 배포 순서로 실행한다. Worker에서 화면·API가 정상임을 확인한 뒤 main을 푸시한다. GitHub Actions는 기존 Pages 주소를 새 Worker 주소로 안내하는 페이지만 배포한다.
+Migration 0005 retains `oauth_states` for the previous Worker, allowing a rollback if deployment fails. Do not delete that table first or edit migrations already applied to production.
 
-0005 마이그레이션은 이전 Worker가 쓰는 `oauth_states`를 유지한다. 배포 실패 시 이전 Worker로 돌아갈 수 있도록 테이블을 먼저 삭제하지 않는다. 운영 DB에 적용된 마이그레이션은 다시 편집하지 않는다.
+## License
 
-## 라이선스
-
-MIT
+MIT.
