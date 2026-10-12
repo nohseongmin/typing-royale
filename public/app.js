@@ -1046,7 +1046,7 @@ function renderGame(){
       <span class="stat streak"><b class="num" id="sStreak">0</b><u>연속</u></span>
     </div>
     <span class="aimpill" id="aimPill"></span>
-    <div class="game-tools"><button class="snd" id="snd">${sndLabel()}</button><button class="snd" id="theme">${themeLabel()}</button></div>
+    <div class="game-tools"><button class="snd" id="snd">${sndLabel()}</button><button class="snd" id="theme">${themeLabel()}</button>${G.online ? "" : '<button class="snd" id="quit" type="button">나가기</button>'}</div>
   </div>
   <div class="stage">
     <div>
@@ -1066,6 +1066,7 @@ function renderGame(){
     </div>
   </div>`;
 
+  if (!G.online) $("#quit").addEventListener("click", quitGame);
   $("#foes").addEventListener("click", e=>{
     const c = e.target.closest(".foe"); if (!c) return;
     const p = G.players.find(x => x.id === c.dataset.id);
