@@ -930,7 +930,7 @@ function start(opts){
   const base = DIFF[CFG.diff].cps;
   G = {players:[], me:null, target:null, running:true, nextElim:0, t0:0,
        tick:null, composing:false, committing:false, slide:false, sliding:false, rebuild:false, ver:-1, spans:[], hadErr:false,
-       net, online:!!net, code:opts.code || null, sentProg:0, sentKey:"", spectating:false, pending:false, pendingInput:"", goAt:0, watchOrder:"",
+       net, online:!!net, code:opts.code || null, sentProg:0, sentKey:"", spectating:false, pending:false, goAt:0, watchOrder:"",
        elimMs:opts.elimMs || ELIM_MS};
   G.me = new Player(opts.you || "me", "나", false);
   if (G.online) G.me.queue = opts.queue.map(unpackLine);
@@ -976,19 +976,18 @@ function wireGame(net){
       me.idx = m.index; me.done = m.index;
       me.queue.splice(me.idx, me.queue.length - me.idx, ...m.queue.map(unpackLine));
       if (advanced){
-        const buffered = G.pendingInput;
         me.typed = ""; me.locked = 0; me.startedAt = performance.now();
-        me.strokes = m.spent; G.pending = false; G.pendingInput = ""; G.slide = true;
-        $("#type").value = buffered;
+        me.strokes = m.spent; G.pending = false; G.slide = true;
         setStreak(me, m.streak);
-        if (buffered) onInput();
+        // 조합 중인 입력칸은 같은 값을 다시 대입해도 IME가 깨진다. 그대로 다음 문장에 판정한다.
+        onInput();
       } else if (m.rejected){
         let prefix = 0;
         while (prefix < me.typed.length && me.typed[prefix] === me.text[prefix]) prefix++;
         // 완성 문자열의 속도 검증이 거절되면 마지막 글자를 다시 입력해 재시도한다.
         prefix = Math.min(prefix, me.text.length - 1);
         me.typed = me.text.slice(0, prefix); me.locked = prefix;
-        $("#type").value = me.typed; G.pending = false; G.pendingInput = "";
+        $("#type").value = me.typed; G.pending = false;
         setStreak(me, m.streak); toast(m.reason);
       }
       G.rebuild = true;
@@ -1131,7 +1130,7 @@ function endComposition(){
 function onInput(){
   if (!G || !G.running || !G.me.alive) return;
   const inp = $("#type"), me = G.me, t = me.text;
-  if (G.pending){ G.pendingInput = inp.value; return; }
+  if (G.pending) return;
   if (performance.now() < G.goAt){ if (G.composing) endComposition(); else inp.value = ""; return; }
   let v = inp.value;
   // 일부 모바일 IME는 compositionstart보다 input을 먼저 보낸다. 마지막 글자가 목표 글자의 자모 앞부분이면 조합 중으로 본다.
@@ -1155,7 +1154,7 @@ function onInput(){
   me.typed = w >= 0 ? v.slice(0, w + 1) : v;
   if (!G.composing && v === t){
     me.complete();
-    if (G.online && G.pending){ inp.value = ""; G.pendingInput = ""; }
+    if (G.online && G.pending) inp.value = "";
     else { inp.value = ""; me.typed = ""; }
   }
 }
