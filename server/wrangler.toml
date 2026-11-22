@@ -1,12 +1,10 @@
 name = "typing-royale"
-main = "src/index.js"
+main = "src/maintenance.js"
+workers_dev = true
+preview_urls = false
 compatibility_date = "2026-09-01"
 
-# 게임 화면(public/)도 이 워커가 같은 주소에서 내보낸다.
-# github.io 주소는 다른 GitHub Pages 프로젝트들과 저장소(localStorage)를 같이 써서 로그인 토큰을 읽힐 수 있다.
-# 파일 요청은 워커를 거치지 않고 바로 나가서 요청 한도에도 안 잡힌다. 보안 헤더는 public/_headers.
-[assets]
-directory = "../public"
+# 등급분류 전 운영 배포에는 게임 파일을 포함하지 않는다. 로컬 게임은 npm run dev로 실행한다.
 
 [[durable_objects.bindings]]
 name = "ROOM"

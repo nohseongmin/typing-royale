@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "dev": "wrangler dev",
-    "deploy": "npm test && wrangler d1 migrations apply typing-royale --remote && wrangler deploy"
+    "dev": "wrangler dev src/index.js --assets ../public --local --ip 127.0.0.1",
+    "deploy": "npm test && wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "4.162.0"
