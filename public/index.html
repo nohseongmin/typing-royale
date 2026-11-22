@@ -144,16 +144,16 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 .row{height:var(--row);display:flex;align-items:center;justify-content:center;padding:0 8px}
 .fit{display:inline-block;white-space:nowrap;transform-origin:center center;font-size:40px;font-weight:600;letter-spacing:.5px}
 .row.past{opacity:0}
-.row.next{opacity:.45}
+.row.next .ch:not(.dt){opacity:.45}
 .row.shake{animation:sk .22s}
 @keyframes sk{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 
 .ch{color:var(--dim);transition:color .08s;position:relative;padding-bottom:9px;white-space:pre}
 .ch.tail:empty{display:none}
-.ch.dt{color:var(--pink);opacity:.6}
+.ch.dt,.mdt,.sentence-demo mark{color:var(--dmg-ink);text-decoration:underline solid;text-underline-offset:.12em}
 .ch.ok{color:var(--ink);opacity:1}
 .ch.comp{color:var(--acc);opacity:1}
-.ch.no{color:var(--red);opacity:1;background:var(--no-bg);border-radius:3px}
+.ch.no,.mno{color:var(--out-ink);background:var(--no-bg);border-radius:3px;text-decoration:underline wavy;text-underline-offset:.12em}
 /* 틀린 자리 위에 원래 글자를 흐릿하게 남긴다 */
 .ch[data-t]:not([data-t=""])::before{
   content:attr(data-t);position:absolute;left:50%;bottom:100%;transform:translateX(-50%);
@@ -164,7 +164,7 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
   background:var(--acc);border-radius:2px;animation:cb 1s steps(2) infinite
 }
 @keyframes cb{50%{opacity:0}}
-.row.next .ch.dt{opacity:1;font-weight:800}
+.row.next .ch.dt{font-weight:800}
 
 #type{position:absolute;opacity:0;left:-12999px}
 .hint{text-align:center;font-size:16px;color:var(--mute);height:23px;margin-top:2px}
@@ -245,9 +245,7 @@ body.risk{background:var(--risk-bg)}   /* 지금 꼴찌 = 다음 탈락 대상 *
 /* 상대가 지금 치는 문장 */
 .foe .mini{margin-top:9px;font-size:16px;line-height:1.45;white-space:pre;overflow:hidden;color:var(--dim);height:24px}
 .mini .mok,.wline .mok{color:var(--ink)}
-.mini .mno,.wline .mno{color:var(--red);background:var(--no-bg);border-radius:3px}
 .mini .mcur{box-shadow:inset 0 -2px 0 var(--acc)}
-.mini .mdt,.wline .mdt{color:var(--pink)}
 /* 관전 */
 .watchhead{text-align:center;color:var(--mute);font-size:16px;margin:5px 0 18px}
 .watchhead b{color:var(--ink)}

@@ -241,7 +241,8 @@ function lineHtml({text, pos, bad, dt}, before = Infinity, after = Infinity){
   const a = Math.max(0, pos - before), b = Math.min(text.length, pos + after);
   let h = "";
   for (let i = a; i < b; i++){
-    const cls = i < pos ? (bad && i === pos - 1 ? "mno" : "mok") : i === pos ? "mcur" : dirty.has(i) ? "mdt" : "";
+    let cls = i < pos ? "mok" : dirty.has(i) ? "mdt" : "";
+    if (i === pos) cls = bad ? "mno" : (cls + " mcur").trim();
     h += `<span class="${cls}">${esc(text[i])}</span>`;
   }
   return h;
