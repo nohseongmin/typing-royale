@@ -2,9 +2,9 @@
 
 A typing battle royale. Completing a sentence attacks another player's text. The slowest player is eliminated every 20 seconds until one player remains.
 
-[Play](https://nohseongmin.github.io/typing-royale/).
+[Service notice](https://nohseongmin.github.io/typing-royale/). Public play is paused while Korean game classification is pending.
 
-The client lives in `public/`. The server uses a Cloudflare Worker and Durable Objects in `server/`. New deployments serve the game and API from the same origin.
+The game client lives in `public/`. For local review, `npm run dev` in `server/` serves the game and multiplayer API on loopback. The production Worker serves only the maintenance notice.
 
 ## Rules
 
@@ -41,7 +41,7 @@ npm test
 npm run dev
 ```
 
-Open release issues are recorded in [SECURITY-STATUS.md](SECURITY-STATUS.md). After validation, `npm run deploy` runs tests, applies remote D1 migrations, and deploys the Worker. Check the interface and API on the Worker before pushing main. GitHub Actions publishes a redirect from the existing Pages address to the Worker.
+Open release issues are recorded in [SECURITY-STATUS.md](SECURITY-STATUS.md). During maintenance, `npm run deploy` tests and deploys the notice. It does not publish game assets or migrate the production database. GitHub Pages continues to redirect invitations to the Worker. Reopening requires a deliberate release of the classified game build, its rating disclosures and applicable migrations.
 
 Migration 0005 retains `oauth_states` for the previous Worker, allowing a rollback if deployment fails. Do not delete that table first or edit migrations already applied to production.
 
